@@ -76,7 +76,7 @@ router.get('/health', (req, res) => {
 router.post('/auth/login', async (req, res) => {
   try {
     console.log('Gateway: Login request:', req.body);
-    const response = await axios.post(`${AUTH_SERVICE_URL}/login`, req.body);
+    const response = await axios.post(`${AUTH_SERVICE_URL}/api/auth/login`, req.body);
     console.log('Gateway: Login response:', response.data);
     res.json(response.data);
   } catch (error) {
@@ -88,7 +88,7 @@ router.post('/auth/login', async (req, res) => {
 router.get('/auth/verify', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Verify request for user:', req.user);
-    const response = await axios.get(`${AUTH_SERVICE_URL}/verify`, {
+    const response = await axios.get(`${AUTH_SERVICE_URL}/api/auth/verify`, {
       headers: { Authorization: req.headers.authorization }
     });
     console.log('Gateway: Verify response:', response.data);
@@ -103,7 +103,7 @@ router.get('/auth/verify', authenticateToken, async (req, res) => {
 router.post('/auth/create-admin', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Create admin request:', req.body);
-    const response = await axios.post(`${AUTH_SERVICE_URL}/create-admin`, req.body, {
+    const response = await axios.post(`${AUTH_SERVICE_URL}/api/auth/create-admin`, req.body, {
       headers: { Authorization: req.headers.authorization }
     });
     console.log('Gateway: Create admin response:', response.data);
@@ -118,26 +118,25 @@ router.post('/auth/create-admin', authenticateToken, async (req, res) => {
 router.post('/auth/create-student', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Create student request:', req.body);
-    const response = await axios.post(`${AUTH_SERVICE_URL}/create-student`, req.body, {
+    const response = await axios.post(`${AUTH_SERVICE_URL}/api/auth/create-student`, req.body, {
       headers: { Authorization: req.headers.authorization }
     });
     console.log('Gateway: Create student response:', response.data);
     res.json(response.data);
   } catch (error) {
     console.error('Gateway: Create student proxy error:', error.response?.data || error.message);
-    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Auth service error' });
+    res.status(error.response?.data || 500).json(error.response?.data || { error: 'Auth service error' });
   }
 });
 
 // Protected routes - require authentication
 router.use('/api', authenticateToken);
 
-// Get user profile (updated to use auth service)
 router.get('/api/profile', async (req, res) => {
   try {
     console.log('Gateway: Profile request for user:', req.user);
     // Use auth service to get fresh user data
-    const response = await axios.get(`${AUTH_SERVICE_URL}/verify`, {
+    const response = await axios.get(`${AUTH_SERVICE_URL}/api/auth/verify`, {
       headers: { Authorization: req.headers.authorization }
     });
     console.log('Gateway: Profile response:', response.data);
