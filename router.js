@@ -162,8 +162,8 @@ router.use('/api/branches', (req, res) => {
   const axiosConfig = {
     method: req.method,
     // url: `${BRANCH_SERVICE_URL}/api${req.originalUrl.replace('/api/branches', '/branches')}`,
-    url: `${BRANCH_SERVICE_URL}${req.originalUrl.replace('/api/branches', '/branches')}`,
-
+    // url: `${BRANCH_SERVICE_URL}${req.originalUrl.replace('/api/branches', '/branches')}`,
+    url: `${BRANCH_SERVICE_URL}${req.originalUrl}`, 
     headers: forwardedHeaders,
     data: req.method !== 'GET' ? req.body : undefined,
     timeout: 60000, // Increased timeout for DB operations
