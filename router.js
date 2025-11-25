@@ -192,6 +192,51 @@ router.use('/api/branches', (req, res) => {
     });
 });
 
+// Superadmin Branch Service proxy routes (for v1 API)
+router.use('/api/v1/superadmin/branches', (req, res) => {
+  console.log('Gateway: Proxying superadmin branch request:', req.method, req.originalUrl);
+
+  // Filter and forward only necessary headers
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${BRANCH_SERVICE_URL}${req.originalUrl.replace('/api/v1/superadmin/branches', '')}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Superadmin Branch Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Superadmin Branch service response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Superadmin Branch Service proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Superadmin branch service error', details: error.message }
+      );
+    });
+});
+
 // User Service proxy routes
 router.use('/api/users', (req, res) => {
   console.log('Gateway: Proxying user request:', req.method, req.originalUrl);
