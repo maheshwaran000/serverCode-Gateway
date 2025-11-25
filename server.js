@@ -11,7 +11,8 @@ const app = express();
 const corsOptions = {
   origin: [
     'http://localhost:3000', // Development
-    'https://localhost:3000', // HTTPS Development
+    'https://localhost:3000', 
+    'https://schooling-client.vercel.app/'// HTTPS Development
     // Add your production frontend domain here if needed
   ],
   credentials: true,
