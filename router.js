@@ -3,6 +3,11 @@ import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import pool from './config/database.js';
 
+// Service URLs for Railway deployment
+const AUTH_SERVICE_URL = 'https://servercode-authservice-production.up.railway.app';
+const BRANCH_SERVICE_URL = 'https://servercode-branchservice-production.up.railway.app';
+const USER_SERVICE_URL = 'https://servercode-userservice-production.up.railway.app';
+
 const router = express.Router();
 
 // Debug endpoint to check environment
@@ -71,7 +76,7 @@ router.get('/health', (req, res) => {
 router.post('/auth/login', async (req, res) => {
   try {
     console.log('Gateway: Login request:', req.body);
-    const response = await axios.post('http://localhost:8001/api/auth/login', req.body);
+    const response = await axios.post(`${AUTH_SERVICE_URL}/login`, req.body);
     console.log('Gateway: Login response:', response.data);
     res.json(response.data);
   } catch (error) {
@@ -83,7 +88,7 @@ router.post('/auth/login', async (req, res) => {
 router.get('/auth/verify', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Verify request for user:', req.user);
-    const response = await axios.get('http://localhost:8001/api/auth/verify', {
+    const response = await axios.get(`${AUTH_SERVICE_URL}/verify`, {
       headers: { Authorization: req.headers.authorization }
     });
     console.log('Gateway: Verify response:', response.data);
@@ -94,23 +99,52 @@ router.get('/auth/verify', authenticateToken, async (req, res) => {
   }
 });
 
+// Create admin user (for branch creators)
+router.post('/auth/create-admin', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Create admin request:', req.body);
+    const response = await axios.post(`${AUTH_SERVICE_URL}/create-admin`, req.body, {
+      headers: { Authorization: req.headers.authorization }
+    });
+    console.log('Gateway: Create admin response:', response.data);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Gateway: Create admin proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Auth service error' });
+  }
+});
+
+// Create student user
+router.post('/auth/create-student', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Create student request:', req.body);
+    const response = await axios.post(`${AUTH_SERVICE_URL}/create-student`, req.body, {
+      headers: { Authorization: req.headers.authorization }
+    });
+    console.log('Gateway: Create student response:', response.data);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Gateway: Create student proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Auth service error' });
+  }
+});
+
 // Protected routes - require authentication
 router.use('/api', authenticateToken);
 
-// Example: Get user profile
+// Get user profile (updated to use auth service)
 router.get('/api/profile', async (req, res) => {
   try {
-    console.log('Gateway: Profile request for userId:', req.user.userId);
-    const userQuery = 'SELECT id, userid, name, email, role FROM users WHERE id = $1';
-    const result = await pool.query(userQuery, [req.user.userId]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    console.log('Gateway: Profile found:', result.rows[0]);
-    res.json({ user: result.rows[0] });
+    console.log('Gateway: Profile request for user:', req.user);
+    // Use auth service to get fresh user data
+    const response = await axios.get(`${AUTH_SERVICE_URL}/verify`, {
+      headers: { Authorization: req.headers.authorization }
+    });
+    console.log('Gateway: Profile response:', response.data);
+    res.json(response.data);
   } catch (error) {
     console.error('Gateway: Profile error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to get user profile' });
   }
 });
 
@@ -128,7 +162,7 @@ router.use('/api/branches', (req, res) => {
 
   const axiosConfig = {
     method: req.method,
-    url: `http://localhost:8002${req.originalUrl}`,
+    url: `${BRANCH_SERVICE_URL}${req.originalUrl.replace('/api/branches', '')}`,
     headers: forwardedHeaders,
     data: req.method !== 'GET' ? req.body : undefined,
     timeout: 60000, // Increased timeout for DB operations
@@ -159,8 +193,52 @@ router.use('/api/branches', (req, res) => {
     });
 });
 
+// User Service proxy routes
+router.use('/api/users', (req, res) => {
+  console.log('Gateway: Proxying user request:', req.method, req.originalUrl);
+
+  // Filter and forward only necessary headers
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${USER_SERVICE_URL}${req.originalUrl.replace('/api/users', '')}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: User Service Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: User service response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: User Service proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'User service error', details: error.message }
+      );
+    });
+});
+
 // Add more API routes here as needed:
-// - /api/users
 // - /api/students
 // - /api/classes
 // - /api/attendance
