@@ -7,24 +7,44 @@ dotenv.config();
 
 const app = express();
 
-// CORS configuration
+// Allowed exact domains
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://localhost:3000',
+  'https://schooling-client.vercel.app',
+  'https://servercode-gateway-production.up.railway.app',
+  'https://schooling-client-3p2hbuhdi-maheshs-projects-ba0e9f94.vercel.app',
+  'https://schooling-client.vercel.app'
+];
+
+// Allow any *.vercel.app
+const vercelRegex = /\.vercel\.app$/;
+
 const corsOptions = {
-  origin: [
-    'http://localhost:3000', // Development
-    'https://localhost:3000', 
-    'https://schooling-client.vercel.app',// HTTPS Development
-    'https://servercode-gateway-production.up.railway.app'
-    // Add your production frontend domain here if needed
-  ],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || vercelRegex.test(origin)) {
+      return callback(null, true);
+    }
+    console.log('❌ Blocked by CORS:', origin);
+    return callback(new Error('CORS NOT ALLOWED'));
+  },
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ]
 };
 
-// Middleware
 app.use(cors(corsOptions));
-app.use(express.json());
+app.options('*', cors(corsOptions)); // IMPORTANT
 
-// Routes
+app.use(express.json());
 app.use("/", routes);
 
 const PORT = process.env.PORT || 8000;
