@@ -126,19 +126,48 @@ router.post('/auth/create-admin', authenticateToken, async (req, res) => {
 });
 
 // Create student user
+// router.post('/auth/create-student', authenticateToken, async (req, res) => {
+//   try {
+//     console.log('Gateway: Create student request:', req.body);
+//     const response = await axios.post(`${AUTH_SERVICE_URL}/create-student`, req.body, {
+//       headers: { Authorization: req.headers.authorization }
+//     });
+//     console.log('Gateway: Create student response:', response.data);
+//     res.json(response.data);
+//   } catch (error) {
+//     console.error('Gateway: Create student proxy error:', error.response?.data || error.message);
+//     res.status(error.response?.data || 500).json(error.response?.data || { error: 'Auth service error' });
+//   }
+// });
 router.post('/auth/create-student', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Create student request:', req.body);
-    const response = await axios.post(`${AUTH_SERVICE_URL}/create-student`, req.body, {
-      headers: { Authorization: req.headers.authorization }
-    });
+
+    const response = await axios.post(
+      `${AUTH_SERVICE_URL}/create-student`,
+      req.body,
+      { headers: { Authorization: req.headers.authorization } }
+    );
+
     console.log('Gateway: Create student response:', response.data);
-    res.json(response.data);
+    return res.json(response.data);
+
   } catch (error) {
-    console.error('Gateway: Create student proxy error:', error.response?.data || error.message);
-    res.status(error.response?.data || 500).json(error.response?.data || { error: 'Auth service error' });
+    console.error(
+      'Gateway: Create student proxy error:',
+      error.response?.data || error.message
+    );
+
+    const status = error.response?.status || 500;
+    const errData = error.response?.data || {
+      success: false,
+      error: 'Auth service error'
+    };
+
+    return res.status(status).json(errData);
   }
 });
+
 // Create teacher user
 router.post('/auth/create-teacher', authenticateToken, async (req, res) => {
   try {
@@ -187,11 +216,69 @@ router.get('/api/profile', async (req, res) => {
   }
 });
 
-// Branch Service proxy routes
+// Branch Service proxy routes with special handling for admin endpoints
 router.use('/api/branches', (req, res) => {
-  console.log('Gateway: Proxying branch request:', req.method, req.originalUrl);
+  console.log('Gateway: Processing branch request:', req.method, req.originalUrl);
 
-  // Filter and forward only necessary headers
+  // Handle admin endpoints directly in Gateway
+  if (req.originalUrl.includes('/admins')) {
+    console.log('Gateway: Handling admin endpoint directly');
+    
+    // Extract branch ID from URL
+    const branchIdMatch = req.originalUrl.match(/\/api\/branches\/([^/]+)\/admins/);
+    if (!branchIdMatch) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid branch ID format'
+      });
+    }
+
+    const branchId = branchIdMatch[1];
+    
+    try {
+      console.log('Gateway: Fetching admin users for branch:', branchId);
+      
+      const query = `
+        SELECT
+          u.userid,
+          u.email,
+          u.name,
+          u.phone,
+          u.created_at
+        FROM users u
+        WHERE u.role = 'admin' AND u.branch_id = $1
+        ORDER BY u.created_at ASC
+      `;
+      
+      pool.query(query, [branchId], (error, result) => {
+        if (error) {
+          console.error('Gateway: Error fetching branch admin users:', error);
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch admin users',
+            details: error.message
+          });
+        }
+        
+        console.log('Gateway: Successfully fetched admin users:', result.rows.length);
+        res.json({
+          success: true,
+          data: result.rows
+        });
+      });
+      
+    } catch (error) {
+      console.error('Gateway: Error in admin endpoint:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Internal server error',
+        details: error.message
+      });
+    }
+    return; // Don't continue to proxy logic
+  }
+
+  // Filter and forward only necessary headers for other branch requests
   const forwardedHeaders = {
     'authorization': req.headers.authorization,
     'content-type': req.headers['content-type'],
@@ -211,7 +298,7 @@ router.use('/api/branches', (req, res) => {
     validateStatus: () => true // Don't throw on any status code
   };
 
-  console.log('Gateway: Axios config:', {
+  console.log('Gateway: Axios config for branch proxy:', {
     method: axiosConfig.method,
     url: axiosConfig.url,
     hasAuth: !!axiosConfig.headers.authorization,
@@ -602,15 +689,15 @@ router.use('/api/admin-service', (req, res) => {
   };
 
   const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006/api'
-    : 'https://servercode-adminservice-production.up.railway.app/api';
+    ? 'http://localhost:8006'
+    : 'https://servercode-adminservice-production.up.railway.app';
 
   // Extract the path after /api/admin-service and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/admin-service', '');
   
   const axiosConfig = {
     method: req.method,
-    url: `${ADMIN_SERVICE_URL}${pathAfterApi}`,
+    url: `${ADMIN_SERVICE_URL}/api${pathAfterApi}`,
     headers: forwardedHeaders,
     data: req.method !== 'GET' ? req.body : undefined,
     timeout: 60000,
@@ -653,15 +740,15 @@ router.use('/api/bus-routes', (req, res) => {
   };
 
   const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006/api/bus-routes'
-    : 'https://servercode-adminservice-production.up.railway.app/api/bus-routes';
+    ? 'http://localhost:8006'
+    : 'https://servercode-adminservice-production.up.railway.app';
 
   // Extract the path after /api/bus-routes and append to base URL
-  let pathAfterApi = req.originalUrl.replace('/api/bus-routes', '');
-
+  const pathAfterApi = req.originalUrl.replace('/api/bus-routes', '');
+  
   const axiosConfig = {
     method: req.method,
-    url: `${ADMIN_SERVICE_URL}${pathAfterApi}`,
+    url: `${ADMIN_SERVICE_URL}/api/bus-routes${pathAfterApi}`,
     headers: forwardedHeaders,
     data: req.method !== 'GET' ? req.body : undefined,
     timeout: 60000,
@@ -705,15 +792,15 @@ router.use('/api/hostels', (req, res) => {
   };
 
   const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006/api/hostels'
-    : 'https://servercode-adminservice-production.up.railway.app/api/hostels';
+    ? 'http://localhost:8006'
+    : 'https://servercode-adminservice-production.up.railway.app';
 
   // Extract the path after /api/hostels and append to base URL
-  let pathAfterApi = req.originalUrl.replace('/api/hostels', '');
-
+  const pathAfterApi = req.originalUrl.replace('/api/hostels', '');
+  
   const axiosConfig = {
     method: req.method,
-    url: `${ADMIN_SERVICE_URL}${pathAfterApi}`,
+    url: `${ADMIN_SERVICE_URL}/api/hostels${pathAfterApi}`,
     headers: forwardedHeaders,
     data: req.method !== 'GET' ? req.body : undefined,
     timeout: 60000,
@@ -757,15 +844,15 @@ router.use('/api/academic-exams', (req, res) => {
   };
 
   const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006/api/academic-exams'
-    : 'https://servercode-adminservice-production.up.railway.app/api/academic-exams';
+    ? 'http://localhost:8006'
+    : 'https://servercode-adminservice-production.up.railway.app';
 
   // Extract the path after /api/academic-exams and append to base URL
-  let pathAfterApi = req.originalUrl.replace('/api/academic-exams', '');
-
+  const pathAfterApi = req.originalUrl.replace('/api/academic-exams', '');
+  
   const axiosConfig = {
     method: req.method,
-    url: `${ADMIN_SERVICE_URL}${pathAfterApi}`,
+    url: `${ADMIN_SERVICE_URL}/api/academic-exams${pathAfterApi}`,
     headers: forwardedHeaders,
     data: req.method !== 'GET' ? req.body : undefined,
     timeout: 60000,
@@ -809,15 +896,15 @@ router.use('/api/fee-templates', (req, res) => {
   };
 
   const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006/api/fee-templates'
-    : 'https://servercode-adminservice-production.up.railway.app/api/fee-templates';
+    ? 'http://localhost:8006'
+    : 'https://servercode-adminservice-production.up.railway.app';
 
   // Extract the path after /api/fee-templates and append to base URL
-  let pathAfterApi = req.originalUrl.replace('/api/fee-templates', '');
-
+  const pathAfterApi = req.originalUrl.replace('/api/fee-templates', '');
+  
   const axiosConfig = {
     method: req.method,
-    url: `${ADMIN_SERVICE_URL}${pathAfterApi}`,
+    url: `${ADMIN_SERVICE_URL}/api/fee-templates${pathAfterApi}`,
     headers: forwardedHeaders,
     data: req.method !== 'GET' ? req.body : undefined,
     timeout: 60000,
