@@ -31,6 +31,22 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// URL cleaning middleware to handle encoded newlines and other issues
+app.use((req, res, next) => {
+  // Clean the originalUrl to remove encoded newlines and other problematic characters
+  const originalUrl = req.originalUrl;
+  const cleanedUrl = originalUrl.replace(/%0A|%0D/g, ''); // Remove encoded newlines and carriage returns
+  
+  if (originalUrl !== cleanedUrl) {
+    console.log(`Gateway: Cleaned URL from "${originalUrl}" to "${cleanedUrl}"`);
+    // Modify the request URL for route matching
+    req.originalUrl = cleanedUrl;
+    req.url = cleanedUrl;
+  }
+  
+  next();
+});
+
 // Routes
 app.use("/", routes);
 

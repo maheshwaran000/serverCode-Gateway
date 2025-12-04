@@ -19,6 +19,18 @@ const USER_SERVICE_URL = isDevelopment
   ? 'http://localhost:8003/api/users'
   : 'https://servercode-userservice-production.up.railway.app/api/users';
 
+const CLASSES_SERVICE_URL = isDevelopment
+  ? 'http://localhost:8004'
+  : 'https://servercodeclassesservice-production.up.railway.app';
+
+const HRMS_SERVICE_URL = isDevelopment
+  ? 'http://localhost:8005/api'
+  : 'https://servercode-hrmsservice-production.up.railway.app/api';
+
+const ADMIN_SERVICE_URL = isDevelopment
+  ? 'http://localhost:8006'
+  : 'https://servercode-adminservice-production.up.railway.app';
+
 const router = express.Router();
 
 // Debug endpoint to check environment
@@ -274,7 +286,7 @@ router.use('/api/branches', (req, res) => {
   };
 
   // Extract the path after /api/branches and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/branches', '');
+  const pathAfterApi = req.originalUrl.replace('/api/branches', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -322,7 +334,7 @@ router.use('/api/v1/superadmin/branches', (req, res) => {
   };
 
   // Extract the path after /api/v1/superadmin/branches and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/v1/superadmin/branches', '');
+  const pathAfterApi = req.originalUrl.replace('/api/v1/superadmin/branches', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -370,7 +382,7 @@ router.use('/api/users', (req, res) => {
   };
 
   // Extract the path after /api/users and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/users', '');
+  const pathAfterApi = req.originalUrl.replace('/api/users', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -416,10 +428,6 @@ router.use('/api/classes/teachers/:teacherId/class', (req, res) => {
     'user-agent': req.headers['user-agent'],
     'x-user-role': req.headers['x-user-role']
   };
-
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
 
   // Construct the target URL correctly
   const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/teachers/${req.params.teacherId}/class`;
@@ -468,10 +476,6 @@ router.use('/api/classes/teachers/:teacherId/timetable', (req, res) => {
     'user-agent': req.headers['user-agent'],
     'x-user-role': req.headers['x-user-role']
   };
-
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
 
   // Construct the target URL correctly
   const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/teachers/${req.params.teacherId}/timetable`;
@@ -570,10 +574,6 @@ router.use('/api/classes/teachers/students', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/teachers/students`;
 
   const axiosConfig = {
@@ -606,12 +606,8 @@ router.use('/api/classes/:id/students', (req, res) => {
     'x-user-role': req.headers['x-user-role']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   // Extract the path after /api/classes/:id/students and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/classes/:id/students', '');
+  const pathAfterApi = req.originalUrl.replace('/api/classes/:id/students', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -658,12 +654,9 @@ router.use('/api/teachers/my-class', (req, res) => {
     'x-user-role': req.headers['x-user-role']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   // Extract the path after /api/teachers/my-class and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/teachers/my-class', '');
+  // Clean the URL by trimming whitespace and newlines
+  const pathAfterApi = req.originalUrl.replace('/api/teachers/my-class', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -710,12 +703,8 @@ router.use('/api/teachers/my-students', (req, res) => {
     'x-user-role': req.headers['x-user-role']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   // Extract the path after /api/teachers/my-students and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/teachers/my-students', '');
+  const pathAfterApi = req.originalUrl.replace('/api/teachers/my-students', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -762,12 +751,8 @@ router.use('/api/classes', (req, res) => {
     'x-user-role': req.headers['x-user-role']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   // Extract the path after /api/classes and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/classes', '');
+  const pathAfterApi = req.originalUrl.replace('/api/classes', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -814,12 +799,8 @@ router.use('/api/teachers/available', (req, res) => {
     'x-user-role': req.headers['x-user-role']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   // Extract the path after /api/teachers/available and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/teachers/available', '');
+  const pathAfterApi = req.originalUrl.replace('/api/teachers/available', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -854,6 +835,198 @@ router.use('/api/teachers/available', (req, res) => {
     });
 });
 
+// Classes Service proxy routes for teacher eligibility check
+router.use('/api/teachers/eligibility', (req, res) => {
+  console.log('Gateway: Proxying Classes teachers/eligibility request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent'],
+    'x-user-role': req.headers['x-user-role']
+  };
+
+  // Extract the path after /api/teachers/eligibility and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/teachers/eligibility', '').trim();
+  
+  const axiosConfig = {
+    method: req.method,
+    url: `${CLASSES_SERVICE_URL}/api/classes${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Classes Service teachers/eligibility Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Classes service teachers/eligibility response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Classes Service teachers/eligibility proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
+// Classes Service proxy routes for teacher notifications
+router.use('/api/teachers/notify', (req, res) => {
+  console.log('Gateway: Proxying Classes teachers/notify request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent'],
+    'x-user-role': req.headers['x-user-role']
+  };
+
+  // Extract the path after /api/teachers/notify and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/teachers/notify', '').trim();
+  
+  const axiosConfig = {
+    method: req.method,
+    url: `${CLASSES_SERVICE_URL}/api/classes${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Classes Service teachers/notify Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Classes service teachers/notify response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Classes Service teachers/notify proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
+// Classes Service proxy routes for teacher my-notifications
+router.use('/api/teachers/my-notifications', (req, res) => {
+  console.log('Gateway: Proxying Classes teachers/my-notifications request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent'],
+    'x-user-role': req.headers['x-user-role']
+  };
+
+  // Extract the path after /api/teachers/my-notifications and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/teachers/my-notifications', '').trim();
+  
+  const axiosConfig = {
+    method: req.method,
+    url: `${CLASSES_SERVICE_URL}/api/classes/teachers/my-notifications${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Classes Service teachers/my-notifications Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Classes service teachers/my-notifications response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Classes Service teachers/my-notifications proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
+// Classes Service proxy routes for teacher notification status
+router.use('/api/teachers/notification-status', (req, res) => {
+  console.log('Gateway: Proxying Classes teachers/notification-status request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent'],
+    'x-user-role': req.headers['x-user-role']
+  };
+
+  // Extract the path after /api/teachers/notification-status and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/teachers/notification-status', '').trim();
+  
+  const axiosConfig = {
+    method: req.method,
+    url: `${CLASSES_SERVICE_URL}/api/classes/teachers/notification-status${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Classes Service teachers/notification-status Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Classes service teachers/notification-status response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Classes Service teachers/notification-status proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
 // Classes Service proxy routes for teachers/all
 router.use('/api/teachers/all', (req, res) => {
   console.log('Gateway: Proxying Classes teachers/all request:', req.method, req.originalUrl);
@@ -866,12 +1039,8 @@ router.use('/api/teachers/all', (req, res) => {
     'x-user-role': req.headers['x-user-role']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   // Extract the path after /api/teachers/all and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/teachers/all', '');
+  const pathAfterApi = req.originalUrl.replace('/api/teachers/all', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -918,12 +1087,8 @@ router.use('/api/academic-years', (req, res) => {
     'x-user-role': req.headers['x-user-role']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   // Extract the path after /api/academic-years and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/academic-years', '');
+  const pathAfterApi = req.originalUrl.replace('/api/academic-years', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -970,12 +1135,8 @@ router.use('/api/classes/:id/attendance', (req, res) => {
     'x-user-role': req.headers['x-user-role']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   // Extract the path after /api/classes/:id/attendance and append to base URL
-  const pathAfterApi = req.originalUrl.replace(`/api/classes/${req.params.id}/attendance`, '');
+  const pathAfterApi = req.originalUrl.replace(`/api/classes/${req.params.id}/attendance`, '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -1071,10 +1232,6 @@ router.use('/api/attendance/:id', (req, res) => {
     'x-user-role': req.headers['x-user-role'],
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/attendance/${req.params.id}`;
 
   const axiosConfig = {
@@ -1109,12 +1266,8 @@ router.use('/api/attendance/date/:date', (req, res) => {
     'x-user-role': req.headers['x-user-role']
   };
 
-  const CLASSES_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8004'
-    : 'https://servercode-classesservice-production.up.railway.app';
-
   // Extract the path after /api/attendance/date/:date and append to base URL
-  const pathAfterApi = req.originalUrl.replace(`/api/attendance/date/${req.params.date}`, '');
+  const pathAfterApi = req.originalUrl.replace(`/api/attendance/date/${req.params.date}`, '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -1160,12 +1313,8 @@ router.use('/api/hrms', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  const HRMS_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8005/api'
-    : 'https://servercode-hrmsservice-production.up.railway.app/api';
-
   // Extract the path after /api/hrms and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/hrms', '');
+  const pathAfterApi = req.originalUrl.replace('/api/hrms', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -1211,12 +1360,8 @@ router.use('/api/admin-service', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006'
-    : 'https://servercode-adminservice-production.up.railway.app';
-
   // Extract the path after /api/admin-service and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/admin-service', '');
+  const pathAfterApi = req.originalUrl.replace('/api/admin-service', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -1262,12 +1407,8 @@ router.use('/api/bus-routes', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006'
-    : 'https://servercode-adminservice-production.up.railway.app';
-
   // Extract the path after /api/bus-routes and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/bus-routes', '');
+  const pathAfterApi = req.originalUrl.replace('/api/bus-routes', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -1314,12 +1455,8 @@ router.use('/api/hostels', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006'
-    : 'https://servercode-adminservice-production.up.railway.app';
-
   // Extract the path after /api/hostels and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/hostels', '');
+  const pathAfterApi = req.originalUrl.replace('/api/hostels', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -1355,6 +1492,54 @@ router.use('/api/hostels', (req, res) => {
     });
 });
 
+// AdminService proxy routes for events
+router.use('/api/events', (req, res) => {
+  console.log('Gateway: Proxying AdminService events request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/events and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/events', '').trim();
+  
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/events${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService events Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService events response status:', response.status);
+      console.log('Gateway: Events response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService events proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
 // AdminService proxy routes for academic exams
 router.use('/api/academic-exams', (req, res) => {
   console.log('Gateway: Proxying AdminService academic-exams request:', req.method, req.originalUrl);
@@ -1366,12 +1551,8 @@ router.use('/api/academic-exams', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006'
-    : 'https://servercode-adminservice-production.up.railway.app';
-
   // Extract the path after /api/academic-exams and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/academic-exams', '');
+  const pathAfterApi = req.originalUrl.replace('/api/academic-exams', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -1418,12 +1599,8 @@ router.use('/api/fee-templates', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006'
-    : 'https://servercode-adminservice-production.up.railway.app';
-
   // Extract the path after /api/fee-templates and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/fee-templates', '');
+  const pathAfterApi = req.originalUrl.replace('/api/fee-templates', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -1982,12 +2159,8 @@ router.use('/api/leaves', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  const ADMIN_SERVICE_URL = isDevelopment
-    ? 'http://localhost:8006'
-    : 'https://servercode-adminservice-production.up.railway.app';
-
   // Extract the path after /api/leaves and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/leaves', '');
+  const pathAfterApi = req.originalUrl.replace('/api/leaves', '').trim();
   
   const axiosConfig = {
     method: req.method,
@@ -2021,6 +2194,75 @@ router.use('/api/leaves', (req, res) => {
         error.response?.data || { error: 'Admin service error', details: error.message }
       );
     });
+});
+
+// ========== WEBSOCKET PROXY FOR STUDENT NOTIFICATIONS ==========
+// WebSocket proxy endpoint for students to receive real-time notifications
+router.get('/ws/students', (req, res) => {
+  console.log('🔌 Gateway: Student WebSocket connection request');
+  
+  // Verify JWT token for WebSocket connection
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) {
+    console.log('⚠️ Gateway: WebSocket connection rejected - no token');
+    return res.status(401).json({
+      error: 'Authentication token required for WebSocket connection'
+    });
+  }
+  
+  try {
+    // Verify JWT token
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+      if (err) {
+        console.log('⚠️ Gateway: WebSocket connection rejected - invalid token');
+        return res.status(403).json({
+          error: 'Invalid or expired token for WebSocket connection'
+        });
+      }
+      
+      console.log('✅ Gateway: WebSocket connection authorized for user:', user.role);
+      
+      // Redirect to ClassesService WebSocket endpoint
+      const targetUrl = `${CLASSES_SERVICE_URL}/ws`;
+      console.log(`🔄 Redirecting to ClassesService WebSocket: ${targetUrl}`);
+      
+      // For actual WebSocket proxy, you would use a WebSocket proxy library like 'ws-proxy'
+      // For now, provide information about direct connection
+      res.json({
+        message: 'WebSocket connection authorized',
+        redirect_info: 'Connect directly to ClassesService WebSocket endpoint',
+        websocket_endpoint: `${CLASSES_SERVICE_URL}/ws`,
+        client_instruction: 'Use student UUID to register via WebSocket',
+        example: {
+          connection_url: `${CLASSES_SERVICE_URL}/ws`,
+          registration_message: {
+            type: 'register',
+            studentId: 'your-student-uuid'
+          }
+        }
+      });
+    });
+  } catch (error) {
+    console.error('❌ Gateway: WebSocket auth error:', error);
+    res.status(500).json({
+      error: 'WebSocket authentication failed'
+    });
+  }
+});
+
+// WebSocket status endpoint for monitoring
+router.get('/ws/status', (req, res) => {
+  res.json({
+    message: 'WebSocket service available',
+    endpoints: {
+      direct: 'ws://localhost:8004/ws (ClassesService)',
+      gateway: 'ws://localhost:8000/ws/students (Gateway - for auth)',
+    },
+    client_info: 'Students should connect directly to ClassesService WebSocket endpoint for real-time notifications',
+    timestamp: new Date().toISOString()
+  });
 });
 
 export default router;
