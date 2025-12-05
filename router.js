@@ -215,6 +215,387 @@ router.get('/api/profile', async (req, res) => {
   }
 });
 
+// Direct branch status toggle endpoint (Active ↔ Inactive)
+router.post('/api/branches/:id/toggle-status', async (req, res) => {
+  try {
+    console.log('Gateway: Direct branch status toggle request:', req.params.id);
+    
+    // Check user permissions
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
+    }
+    
+    jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
+      if (err || (user.role !== 'superadmin' && user.role !== 'access_manager')) {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied: Only superadmin or access_manager can toggle branch status'
+        });
+      }
+      
+      try {
+        // Get current branch status
+        const currentStatusResult = await pool.query(
+          `SELECT status, branch_name, branch_code FROM superadmin.branches WHERE id = $1`,
+          [req.params.id]
+        );
+        
+        if (currentStatusResult.rows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: 'Branch not found'
+          });
+        }
+        
+        const currentStatus = currentStatusResult.rows[0].status;
+        let newStatus;
+        
+        // Toggle logic: Active ↔ Inactive
+        if (currentStatus === 'Active') {
+          newStatus = 'Inactive';
+        } else if (currentStatus === 'Inactive') {
+          newStatus = 'Active';
+        } else {
+          // For other statuses (Pending, Rejected), set to Active by default
+          newStatus = 'Active';
+        }
+        
+        // Update branch status
+        const updateResult = await pool.query(
+          `UPDATE superadmin.branches
+           SET status = $1, updated_at = NOW()
+           WHERE id = $2
+           RETURNING *`,
+          [newStatus, req.params.id]
+        );
+        
+        const actionDescription = currentStatus === 'Active' ? 'deactivated' : 'activated';
+        
+        // Log audit event
+        try {
+          await pool.query(`
+            INSERT INTO audit_logs (user_id, action, details, status, created_at)
+            VALUES ($1, $2, $3, $4, NOW())
+          `, [
+            user.userId,
+            'toggle_branch_status',
+            `${actionDescription} branch: ${currentStatusResult.rows[0].branch_name} (${currentStatusResult.rows[0].branch_code}) - ${currentStatus} → ${newStatus}`,
+            'success'
+          ]);
+          console.log('✅ Branch status toggle logged successfully');
+        } catch (auditError) {
+          console.log('⚠️ Audit logging skipped for branch status toggle');
+        }
+        
+        console.log(`✅ Branch ${req.params.id} ${actionDescription} by user ${user.userId} (${currentStatus} → ${newStatus})`);
+        
+        res.json({
+          success: true,
+          message: `Branch ${actionDescription} successfully`,
+          data: {
+            ...updateResult.rows[0],
+            status_change: {
+              from: currentStatus,
+              to: newStatus,
+              action: actionDescription
+            }
+          }
+        });
+        
+      } catch (dbError) {
+        console.error('Database error in branch status toggle:', dbError);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to toggle branch status',
+          details: dbError.message
+        });
+      }
+    });
+    
+  } catch (error) {
+    console.error('Branch status toggle error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to toggle branch status',
+      details: error.message
+    });
+  }
+});
+
+// Direct branch status update endpoint with explicit status
+router.post('/api/branches/:id/update-status', async (req, res) => {
+  try {
+    console.log('Gateway: Direct branch status update request:', req.params.id, 'New status:', req.body.status);
+    
+    // Check user permissions
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
+    }
+    
+    jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
+      if (err || (user.role !== 'superadmin' && user.role !== 'access_manager')) {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied: Only superadmin or access_manager can update branch status'
+        });
+      }
+      
+      try {
+        const { status } = req.body;
+        
+        // Validate status
+        const validStatuses = ['Active', 'Inactive', 'Pending', 'Rejected'];
+        if (!validStatuses.includes(status)) {
+          return res.status(400).json({
+            success: false,
+            error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+          });
+        }
+        
+        // Get current branch info
+        const currentInfoResult = await pool.query(
+          `SELECT status, branch_name, branch_code FROM superadmin.branches WHERE id = $1`,
+          [req.params.id]
+        );
+        
+        if (currentInfoResult.rows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: 'Branch not found'
+          });
+        }
+        
+        const currentStatus = currentInfoResult.rows[0].status;
+        
+        // Update branch status
+        const updateResult = await pool.query(
+          `UPDATE superadmin.branches
+           SET status = $1, updated_at = NOW()
+           WHERE id = $2
+           RETURNING *`,
+          [status, req.params.id]
+        );
+        
+        // Log audit event
+        try {
+          await pool.query(`
+            INSERT INTO audit_logs (user_id, action, details, status, created_at)
+            VALUES ($1, $2, $3, $4, NOW())
+          `, [
+            user.userId,
+            'update_branch_status',
+            `Updated branch status: ${currentInfoResult.rows[0].branch_name} (${currentInfoResult.rows[0].branch_code}) - ${currentStatus} → ${status}`,
+            'success'
+          ]);
+          console.log('✅ Branch status update logged successfully');
+        } catch (auditError) {
+          console.log('⚠️ Audit logging skipped for branch status update');
+        }
+        
+        console.log(`✅ Branch ${req.params.id} status updated by user ${user.userId} (${currentStatus} → ${status})`);
+        
+        res.json({
+          success: true,
+          message: 'Branch status updated successfully',
+          data: {
+            ...updateResult.rows[0],
+            status_change: {
+              from: currentStatus,
+              to: status,
+              action: 'updated'
+            }
+          }
+        });
+        
+      } catch (dbError) {
+        console.error('Database error in branch status update:', dbError);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to update branch status',
+          details: dbError.message
+        });
+      }
+    });
+    
+  } catch (error) {
+    console.error('Branch status update error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update branch status',
+      details: error.message
+    });
+  }
+});
+
+// Direct approve/reject endpoints for branches (bypass BranchService for clarity)
+router.post('/api/branches/:id/approve', async (req, res) => {
+  try {
+    console.log('Gateway: Direct branch approve request:', req.params.id);
+    
+    // Check user permissions
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
+    }
+    
+    jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
+      if (err || (user.role !== 'superadmin' && user.role !== 'access_manager')) {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied: Only superadmin or access_manager can approve branches'
+        });
+      }
+      
+      try {
+        // Update branch status to Active
+        const updateResult = await pool.query(
+          `UPDATE superadmin.branches
+           SET status = 'Active', updated_at = NOW()
+           WHERE id = $1
+           RETURNING *`,
+          [req.params.id]
+        );
+        
+        if (updateResult.rows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: 'Branch not found'
+          });
+        }
+        
+        // Log audit event
+        try {
+          await pool.query(`
+            INSERT INTO audit_logs (user_id, action, details, status, created_at)
+            VALUES ($1, $2, $3, $4, NOW())
+          `, [
+            user.userId,
+            'approve_branch',
+            `Approved branch: ${updateResult.rows[0].branch_name} (${updateResult.rows[0].branch_code})`,
+            'success'
+          ]);
+          console.log('✅ Branch approval logged successfully');
+        } catch (auditError) {
+          console.log('⚠️ Audit logging skipped for branch approval');
+        }
+        
+        console.log(`✅ Branch ${req.params.id} approved by user ${user.userId}`);
+        
+        res.json({
+          success: true,
+          message: 'Branch approved successfully',
+          data: updateResult.rows[0]
+        });
+        
+      } catch (dbError) {
+        console.error('Database error in branch approval:', dbError);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to approve branch',
+          details: dbError.message
+        });
+      }
+    });
+    
+  } catch (error) {
+    console.error('Branch approval error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to approve branch',
+      details: error.message
+    });
+  }
+});
+
+router.post('/api/branches/:id/reject', async (req, res) => {
+  try {
+    console.log('Gateway: Direct branch reject request:', req.params.id);
+    
+    // Check user permissions
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
+    }
+    
+    jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
+      if (err || (user.role !== 'superadmin' && user.role !== 'access_manager')) {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied: Only superadmin or access_manager can reject branches'
+        });
+      }
+      
+      try {
+        // Update branch status to Rejected
+        const updateResult = await pool.query(
+          `UPDATE superadmin.branches
+           SET status = 'Rejected', updated_at = NOW()
+           WHERE id = $1
+           RETURNING *`,
+          [req.params.id]
+        );
+        
+        if (updateResult.rows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: 'Branch not found'
+          });
+        }
+        
+        // Log audit event
+        try {
+          await pool.query(`
+            INSERT INTO audit_logs (user_id, action, details, status, created_at)
+            VALUES ($1, $2, $3, $4, NOW())
+          `, [
+            user.userId,
+            'reject_branch',
+            `Rejected branch: ${updateResult.rows[0].branch_name} (${updateResult.rows[0].branch_code})`,
+            'success'
+          ]);
+          console.log('✅ Branch rejection logged successfully');
+        } catch (auditError) {
+          console.log('⚠️ Audit logging skipped for branch rejection');
+        }
+        
+        console.log(`✅ Branch ${req.params.id} rejected by user ${user.userId}`);
+        
+        res.json({
+          success: true,
+          message: 'Branch rejected successfully',
+          data: updateResult.rows[0]
+        });
+        
+      } catch (dbError) {
+        console.error('Database error in branch rejection:', dbError);
+        res.status(500).json({
+          success: false,
+          error: 'Failed to reject branch',
+          details: dbError.message
+        });
+      }
+    });
+    
+  } catch (error) {
+    console.error('Branch rejection error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reject branch',
+      details: error.message
+    });
+  }
+});
+
 // Branch Service proxy routes with special handling for admin endpoints
 router.use('/api/branches', (req, res) => {
   console.log('Gateway: Processing branch request:', req.method, req.originalUrl);
@@ -1065,6 +1446,54 @@ router.use('/api/teachers/all', (req, res) => {
     })
     .catch(error => {
       console.error('Gateway: Classes Service teachers/all proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
+// Classes Service proxy routes for teachers/my-timetable
+router.use('/api/teachers/my-timetable', (req, res) => {
+  console.log('Gateway: Proxying Classes teachers/my-timetable request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent'],
+    'x-user-role': req.headers['x-user-role']
+  };
+
+  // Extract the path after /api/teachers/my-timetable and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/teachers/my-timetable', '').trim();
+  
+  const axiosConfig = {
+    method: req.method,
+    url: `${CLASSES_SERVICE_URL}/api/classes/teachers/my-timetable${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Classes Service teachers/my-timetable Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Classes service teachers/my-timetable response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Classes Service teachers/my-timetable proxy error:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data
