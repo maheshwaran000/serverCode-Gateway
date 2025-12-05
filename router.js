@@ -750,6 +750,50 @@ router.use('/api/v1/superadmin/branches', (req, res) => {
     });
 });
 
+// User Service proxy routes for teacher profile endpoints
+router.use('/api/users/teachers/profile', (req, res) => {
+  console.log('Gateway: Proxying teachers/profile request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${USER_SERVICE_URL}/teachers/profile${req.originalUrl.replace('/api/users/teachers/profile', '')}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: User Service teachers/profile Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: User service teachers/profile response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: User Service teachers/profile proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'User service error', details: error.message }
+      );
+    });
+});
+
 // User Service proxy routes
 router.use('/api/users', (req, res) => {
   console.log('Gateway: Proxying user request:', req.method, req.originalUrl);
@@ -1494,6 +1538,55 @@ router.use('/api/teachers/my-timetable', (req, res) => {
     })
     .catch(error => {
       console.error('Gateway: Classes Service teachers/my-timetable proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
+// Classes Service proxy routes for timetable CRUD operations
+router.use('/api/timetable/:id', (req, res) => {
+  console.log('Gateway: Proxying Classes timetable/:id request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent'],
+    'x-user-role': req.headers['x-user-role']
+  };
+
+  // Extract the timetable ID and construct target URL
+  const timetableId = req.params.id;
+  const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/timetable/${timetableId}`;
+  
+  const axiosConfig = {
+    method: req.method,
+    url: targetUrl,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Classes Service timetable/:id Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Classes service timetable/:id response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Classes Service timetable/:id proxy error:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data
