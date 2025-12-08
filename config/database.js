@@ -1,17 +1,15 @@
-import pkg from 'pg';
-const { Pool } = pkg;
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+const { Pool } = require('pg');
+const dotenv = require('dotenv');
+const path = require('path');
 
-// Load environment variables
-dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env') });
+// __dirname equivalent in CommonJS already exists, no need for import.meta.url
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const pool = new Pool({
-  host: process.env.DB_HOST ,
-  port: process.env.DB_PORT ,
-  database: process.env.DB_NAME ,
-  user: process.env.DB_USER ,
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   max: 20,
   min: 2,
@@ -35,4 +33,4 @@ console.log("Gateway Database Pool Configuration:", {
   ssl: process.env.DB_SSL
 });
 
-export default pool;
+module.exports = pool;

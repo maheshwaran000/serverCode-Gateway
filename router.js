@@ -1,7 +1,10 @@
-import express from 'express';
-import axios from 'axios';
-import jwt from 'jsonwebtoken';
-import pool from './config/database.js';
+const express = require('express');
+const axios = require('axios');
+const jwt = require('jsonwebtoken');
+const pool = require('./config/database.js');
+const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcryptjs');
+
 
 // Environment-based service URLs
 const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -30,6 +33,10 @@ const HRMS_SERVICE_URL = isDevelopment
 const ADMIN_SERVICE_URL = isDevelopment
   ? 'http://localhost:8006'
   : 'https://servercode-adminservice-production.up.railway.app';
+
+const FEE_MANAGEMENT_SERVICE_URL = isDevelopment
+  ? 'http://localhost:8007'
+  : 'https://servercode-feemanagement-production.up.railway.app';
 
 const router = express.Router();
 
@@ -168,7 +175,7 @@ router.post('/auth/create-student', authenticateToken, async (req, res) => {
 });
 
 // Create teacher user
-router.post('/auth/create-teacher', authenticateToken, async (req, res) => {
+router.post('/api/auth/create-teacher', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Create teacher request:', req.body);
     const response = await axios.post(`${AUTH_SERVICE_URL}/create-teacher`, req.body, {
@@ -183,7 +190,7 @@ router.post('/auth/create-teacher', authenticateToken, async (req, res) => {
 });
 
 // Create staff user
-router.post('/auth/create-staff', authenticateToken, async (req, res) => {
+router.post('/api/auth/create-staff', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Create staff request:', req.body);
     const response = await axios.post(`${AUTH_SERVICE_URL}/create-staff`, req.body, {
@@ -596,6 +603,342 @@ router.post('/api/branches/:id/reject', async (req, res) => {
   }
 });
 
+// Specific route for academic years - proxy to ClassesService
+router.use('/api/branches/academic-years', (req, res) => {
+  console.log('Gateway: Proxying academic-years request to ClassesService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent'],
+    'x-user-role': req.headers['x-user-role']
+  };
+
+  // Extract the path after /api/branches/academic-years and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/branches/academic-years', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${CLASSES_SERVICE_URL}/api/classes/academic-years${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Classes Service academic-years Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Classes service academic-years response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Classes Service academic-years proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
+// Specific route for transport routes - proxy to AdminService
+router.use('/api/branches/transport/routes', (req, res) => {
+  console.log('Gateway: Proxying transport routes request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/branches/transport/routes and append to bus-routes
+  const pathAfterApi = req.originalUrl.replace('/api/branches/transport/routes', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/bus-routes${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService bus-routes Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService bus-routes response status:', response.status);
+      console.log('Gateway: Bus routes response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService bus-routes proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// Specific route for blocks - proxy to AdminService
+router.use('/api/branches/blocks', (req, res) => {
+  console.log('Gateway: Proxying blocks request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/branches/blocks and append to blocks
+  const pathAfterApi = req.originalUrl.replace('/api/branches/blocks', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/blocks${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService blocks Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService blocks response status:', response.status);
+      console.log('Gateway: Blocks response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService blocks proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// Specific route for rooms - proxy to AdminService
+router.use('/api/branches/rooms', (req, res) => {
+  console.log('Gateway: Proxying rooms request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/branches/rooms and append to rooms
+  const pathAfterApi = req.originalUrl.replace('/api/branches/rooms', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/rooms${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService rooms Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService rooms response status:', response.status);
+      console.log('Gateway: Rooms response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService rooms proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// Specific route for allocate-room - proxy to AdminService
+router.use('/api/branches/allocate-room', (req, res) => {
+  console.log('Gateway: Proxying allocate-room request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/branches/allocate-room and append to allocate-room
+  const pathAfterApi = req.originalUrl.replace('/api/branches/allocate-room', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/allocate-room${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService allocate-room Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService allocate-room response status:', response.status);
+      console.log('Gateway: Allocate-room response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService allocate-room proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// Specific route for floors - proxy to AdminService
+router.use('/api/branches/floors', (req, res) => {
+  console.log('Gateway: Proxying floors request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/branches/floors and append to floors
+  const pathAfterApi = req.originalUrl.replace('/api/branches/floors', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/floors${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService floors Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService floors response status:', response.status);
+      console.log('Gateway: Floors response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService floors proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// Specific route for hostels - proxy to AdminService
+router.use('/api/branches/hostels', (req, res) => {
+  console.log('Gateway: Proxying hostels request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/branches/hostels and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/branches/hostels', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/hostels${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService hostels Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService hostels response status:', response.status);
+      console.log('Gateway: Hostels response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService hostels proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
 // Branch Service proxy routes with special handling for admin endpoints
 router.use('/api/branches', (req, res) => {
   console.log('Gateway: Processing branch request:', req.method, req.originalUrl);
@@ -750,6 +1093,163 @@ router.use('/api/v1/superadmin/branches', (req, res) => {
     });
 });
 
+// User Service proxy routes for branch users endpoint (must come before generic /api/users)
+router.use('/api/users/branch/:branchId', (req, res) => {
+  console.log('Gateway: Proxying branch users request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${USER_SERVICE_URL}/branch/${req.params.branchId}${req.originalUrl.replace(`/api/users/branch/${req.params.branchId}`, '')}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: User Service branch users Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: User service branch users response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: User Service branch users proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'User service error', details: error.message }
+      );
+    });
+  });      
+// User Service proxy routes for individual student details
+router.use('/api/users/students/:id', (req, res) => {
+  console.log('Gateway: Proxying students/:id request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${USER_SERVICE_URL}/students/${req.params.id}${req.originalUrl.replace(`/api/users/students/${req.params.id}`, '')}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: User Service students/:id Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: User service students/:id response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: User Service students/:id proxy error:', error.response?.data || error.message);
+      res.status(error.response?.status || 500).json(error.response?.data || { error: 'User service error', details: error.message });
+    });
+});
+
+// User Service proxy routes for individual teacher details
+router.use('/api/users/teachers/:id', (req, res) => {
+  console.log('Gateway: Proxying teachers/:id request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${USER_SERVICE_URL}/teachers/${req.params.id}${req.originalUrl.replace(`/api/users/teachers/${req.params.id}`, '')}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: User Service teachers/:id Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: User service teachers/:id response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: User Service teachers/:id proxy error:', error.response?.data || error.message);
+      res.status(error.response?.status || 500).json(error.response?.data || { error: 'User service error', details: error.message });
+    });
+});
+
+// User Service proxy routes for individual staff details
+router.use('/api/users/staff/:id', (req, res) => {
+  console.log('Gateway: Proxying staff/:id request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${USER_SERVICE_URL}/staff/${req.params.id}${req.originalUrl.replace(`/api/users/staff/${req.params.id}`, '')}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: User Service staff/:id Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: User service staff/:id response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: User Service staff/:id proxy error:', error.response?.data || error.message);
+      res.status(error.response?.status || 500).json(error.response?.data || { error: 'User service error', details: error.message });
+    });
+});
+
 // User Service proxy routes for teacher profile endpoints
 router.use('/api/users/teachers/profile', (req, res) => {
   console.log('Gateway: Proxying teachers/profile request:', req.method, req.originalUrl);
@@ -808,7 +1308,7 @@ router.use('/api/users', (req, res) => {
 
   // Extract the path after /api/users and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/users', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${USER_SERVICE_URL}${pathAfterApi}`,
@@ -2110,7 +2610,103 @@ router.use('/api/academic-exams', (req, res) => {
     });
 });
 
-// AdminService proxy routes for fee templates
+// FeeManagement Service proxy routes for student fees
+router.use('/api/fee-management', (req, res) => {
+  console.log('Gateway: Proxying FeeManagement service request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/fee-management and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/fee-management', '').trim();
+  
+  const axiosConfig = {
+    method: req.method,
+    url: `${FEE_MANAGEMENT_SERVICE_URL}/api${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: FeeManagement Service Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: FeeManagement service response status:', response.status);
+      console.log('Gateway: Fee management response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: FeeManagement Service proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Fee management service error', details: error.message }
+      );
+    });
+});
+
+// FeeManagement Service proxy routes for student fees by user ID
+router.use('/api/student-fees', (req, res) => {
+  console.log('Gateway: Proxying student-fees request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/student-fees and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/student-fees', '').trim();
+  
+  const axiosConfig = {
+    method: req.method,
+    url: `${FEE_MANAGEMENT_SERVICE_URL}/api/student-fees${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: FeeManagement Student Fees Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: FeeManagement student-fees response status:', response.status);
+      console.log('Gateway: Student fees response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: FeeManagement student-fees proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Fee management service error', details: error.message }
+      );
+    });
+});
+
+// Legacy AdminService proxy routes for fee templates
 router.use('/api/fee-templates', (req, res) => {
   console.log('Gateway: Proxying AdminService fee-templates request:', req.method, req.originalUrl);
 
@@ -2515,8 +3111,8 @@ router.post('/api/users/register', async (req, res) => {
     try {
       await client.query('BEGIN');
       
-      const userId = require('uuid').v4();
-      const hashedPassword = await require('bcryptjs').hash(password, 10);
+      const userId = uuidv4();
+      const hashedPassword = await bcrypt.hash(password, 10);
       const email = `${userid.toLowerCase()}@eims.local`;
       
       // Insert user
@@ -2787,4 +3383,5 @@ router.get('/ws/status', (req, res) => {
   });
 });
 
-export default router;
+module.exports = router;
+
