@@ -2762,6 +2762,7 @@ router.get('/api/staff', async (req, res) => {
     // Simplified query first to test connection
     const query = `
       SELECT
+        s.user_id,
         s.staff_id,
         s.department,
         s.designation,
@@ -2918,6 +2919,7 @@ router.get('/api/teachers', async (req, res) => {
     // Simplified query first to test connection
     const query = `
       SELECT
+        t.user_id,
         t.teacher_id,
         t.department,
         t.qualification,
