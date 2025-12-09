@@ -937,11 +937,97 @@ router.use('/api/branches/hostels', (req, res) => {
         error.response?.data || { error: 'Admin service error', details: error.message }
       );
     });
+  });    
+// Get all branches with aggregated statistics
+router.get('/api/branches/with-stats', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Fetching branches with statistics');
+
+    // Get all branches
+    const branchesQuery = `
+      SELECT id, branch_code, branch_name, branch_type, location, principal_name,
+             contact_email, contact_phone, address, status, created_at
+      FROM superadmin.branches
+      WHERE status = 'Active'
+      ORDER BY branch_name
+    `;
+
+    const branchesResult = await pool.query(branchesQuery);
+    const branches = branchesResult.rows;
+
+    // Get user counts for each branch
+    const userCountsQuery = `
+      SELECT
+        branch_id,
+        role,
+        COUNT(*) as count
+      FROM public.users
+      WHERE branch_id IS NOT NULL
+        AND role IN ('student', 'teacher', 'staff')
+      GROUP BY branch_id, role
+    `;
+
+    const userCountsResult = await pool.query(userCountsQuery);
+    const userCounts = userCountsResult.rows;
+
+    // Organize counts by branch
+    const branchStats = {};
+    userCounts.forEach(count => {
+      if (!branchStats[count.branch_id]) {
+        branchStats[count.branch_id] = {
+          students: 0,
+          teachers: 0,
+          staff: 0
+        };
+      }
+      branchStats[count.branch_id][count.role + 's'] = parseInt(count.count);
+    });
+
+    // Combine branches with their stats
+    const branchesWithStats = branches.map(branch => ({
+      ...branch,
+      totalStudents: branchStats[branch.id]?.students || 0,
+      totalTeachers: branchStats[branch.id]?.teachers || 0,
+      totalStaff: branchStats[branch.id]?.staff || 0
+    }));
+
+    // Calculate overall totals
+    const overallTotals = branchesWithStats.reduce((acc, branch) => ({
+      totalBranches: branches.length,
+      totalStudents: acc.totalStudents + branch.totalStudents,
+      totalTeachers: acc.totalTeachers + branch.totalTeachers,
+      totalStaff: acc.totalStaff + branch.totalStaff
+    }), { totalBranches: 0, totalStudents: 0, totalTeachers: 0, totalStaff: 0 });
+
+    const response = {
+      success: true,
+      data: {
+        branches: branchesWithStats,
+        summary: overallTotals
+      }
+    };
+
+    console.log('✅ Branches with stats retrieved successfully');
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching branches with stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch branches with statistics',
+      details: error.message
+    });
+  }
 });
 
 // Branch Service proxy routes with special handling for admin endpoints
 router.use('/api/branches', (req, res) => {
   console.log('Gateway: Processing branch request:', req.method, req.originalUrl);
+
+  // Skip specific routes that are handled elsewhere
+  if (req.originalUrl.includes('/with-stats')) {
+    console.log('Gateway: Skipping /with-stats route - handled by specific endpoint');
+    return res.status(404).json({ error: 'Route not found in proxy' });
+  }
 
   // Handle admin endpoints directly in Gateway
   if (req.originalUrl.includes('/admins')) {
@@ -2575,7 +2661,7 @@ router.use('/api/academic-exams', (req, res) => {
 
   // Extract the path after /api/academic-exams and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/academic-exams', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${ADMIN_SERVICE_URL}/api/academic-exams${pathAfterApi}`,
@@ -2600,6 +2686,54 @@ router.use('/api/academic-exams', (req, res) => {
     })
     .catch(error => {
       console.error('Gateway: AdminService academic-exams proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// AdminService proxy routes for notices
+router.use('/api/notices', (req, res) => {
+  console.log('Gateway: Proxying AdminService notices request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/notices and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/notices', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/notices${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService notices Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService notices response status:', response.status);
+      console.log('Gateway: Notices response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService notices proxy error:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data
@@ -2884,19 +3018,19 @@ router.get('/api/staff/user/:userId', async (req, res) => {
 });
 
 // User Management Endpoints (Implemented locally in Gateway)
-router.get('/api/users/superadmins', async (req, res) => {
+router.get('/api/users/superadmins', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Fetching superadmins');
-    
+
     const query = `
       SELECT id, userid, name, email, role, created_at
       FROM users
       WHERE role = 'superadmin'
       ORDER BY created_at DESC
     `;
-    
+
     const result = await pool.query(query);
-    
+
     res.json({
       success: true,
       data: result.rows
@@ -2906,6 +3040,60 @@ router.get('/api/users/superadmins', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch superadmins',
+      details: error.message
+    });
+  }
+});
+
+router.get('/api/users/branch-level-managers', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Fetching branch level managers');
+
+    const query = `
+      SELECT id, userid, name, email, role, created_at
+      FROM users
+      WHERE role = 'branchlevel_manager'
+      ORDER BY created_at DESC
+    `;
+
+    const result = await pool.query(query);
+
+    res.json({
+      success: true,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching branch level managers:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch branch level managers',
+      details: error.message
+    });
+  }
+});
+
+router.get('/api/users/access-level-managers', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Fetching access level managers');
+
+    const query = `
+      SELECT id, userid, name, email, role, created_at
+      FROM users
+      WHERE role = 'access_manager'
+      ORDER BY created_at DESC
+    `;
+
+    const result = await pool.query(query);
+
+    res.json({
+      success: true,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching access level managers:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch access level managers',
       details: error.message
     });
   }
@@ -3385,5 +3573,5 @@ router.get('/ws/status', (req, res) => {
   });
 });
 
-module.exports = router;
 
+module.exports = router;
