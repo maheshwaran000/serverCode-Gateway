@@ -28,7 +28,7 @@ const CLASSES_SERVICE_URL = isDevelopment
 
 const HRMS_SERVICE_URL = isDevelopment
   ? 'http://localhost:8005/api'
-  : 'https://servercode-hrmsservice-production.up.railway.app/api';
+  : 'https://servercodehrms-production.up.railway.app/';
 
 const ADMIN_SERVICE_URL = isDevelopment
   ? 'http://localhost:8006'
@@ -36,7 +36,7 @@ const ADMIN_SERVICE_URL = isDevelopment
 
 const FEE_MANAGEMENT_SERVICE_URL = isDevelopment
   ? 'http://localhost:8007'
-  : 'https://servercode-feemanagement-production.up.railway.app';
+  : 'https://servercodefeemanagement-production.up.railway.app/';
 
 const router = express.Router();
 
@@ -796,7 +796,7 @@ router.use('/api/branches/rooms', (req, res) => {
 });
 
 // Specific route for allocate-room - proxy to AdminService
-router.use('/api/branches/allocate-room', (req, res) => {
+router.use('/api/allocate-room', (req, res) => {
   console.log('Gateway: Proxying allocate-room request to AdminService:', req.method, req.originalUrl);
 
   const forwardedHeaders = {
@@ -806,12 +806,12 @@ router.use('/api/branches/allocate-room', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  // Extract the path after /api/branches/allocate-room and append to allocate-room
-  const pathAfterApi = req.originalUrl.replace('/api/branches/allocate-room', '').trim();
+  // Extract the path after /api/allocate-room and append to allocate-room
+  const pathAfterApi = req.originalUrl.replace('/api/allocate-room', '').trim();
 
   const axiosConfig = {
     method: req.method,
-    url: `${ADMIN_SERVICE_URL}/api/allocate-room${pathAfterApi}`,
+    url: `${ADMIN_SERVICE_URL}/api/allocate-room`,
     headers: forwardedHeaders,
     data: req.method !== 'GET' ? req.body : undefined,
     timeout: 60000,
@@ -3632,6 +3632,54 @@ router.use('/api/leaves', (req, res) => {
     })
     .catch(error => {
       console.error('Gateway: AdminService leaves proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// AdminService proxy routes for library management
+router.use('/api/library', (req, res) => {
+  console.log('Gateway: Proxying AdminService library request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/library and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/library', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/library${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService library Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService library response status:', response.status);
+      console.log('Gateway: Library response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService library proxy error:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data
