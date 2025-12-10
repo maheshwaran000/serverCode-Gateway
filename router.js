@@ -28,7 +28,7 @@ const CLASSES_SERVICE_URL = isDevelopment
 
 const HRMS_SERVICE_URL = isDevelopment
   ? 'http://localhost:8005/api'
-  : 'https://servercodehrms-production.up.railway.app/';
+  : 'https://servercode-hrmsservice-production.up.railway.app/api';
 
 const ADMIN_SERVICE_URL = isDevelopment
   ? 'http://localhost:8006'
@@ -36,7 +36,7 @@ const ADMIN_SERVICE_URL = isDevelopment
 
 const FEE_MANAGEMENT_SERVICE_URL = isDevelopment
   ? 'http://localhost:8007'
-  : 'https://servercodefeemanagement-production.up.railway.app/';
+  : 'https://servercodefeemanagement-production.up.railway.app';
 
 const router = express.Router();
 
