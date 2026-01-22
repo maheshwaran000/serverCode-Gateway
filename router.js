@@ -38,6 +38,14 @@ const FEE_MANAGEMENT_SERVICE_URL = isDevelopment
   ? 'http://localhost:8007'
   : 'https://servercodefeemanagement-production.up.railway.app';
 
+const EXAMINATION_SERVICE_URL = isDevelopment
+  ? 'http://localhost:8009'
+  : 'https://servercodeexamination-production.up.railway.app';
+
+const PUBLIC_ADMISSIONS_SERVICE_URL = isDevelopment
+  ? 'http://localhost:3008/public'
+  : 'https://servercode-publicadmissions-production.up.railway.app/public';
+
 const router = express.Router();
 
 // Debug endpoint to check environment
@@ -79,6 +87,14 @@ router.get('/test-db', async (req, res) => {
 
 // JWT verification middleware
 const authenticateToken = (req, res, next) => {
+  // Skip authentication for public routes
+  if (req.originalUrl.includes('/api/examination/sessions') ||
+      req.originalUrl.includes('/api/public/admissions')) {
+    console.log(`🔓 Public route accessed: ${req.method} ${req.originalUrl}`);
+    req.user = { id: 'public-user', role: 'public' };
+    return next();
+  }
+
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -129,6 +145,21 @@ router.get('/auth/verify', authenticateToken, async (req, res) => {
   }
 });
 
+// Reset password for any user by userid
+router.post('/auth/reset-password', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Reset password request:', req.body);
+    const response = await axios.post(`${AUTH_SERVICE_URL}/reset-password`, req.body, {
+      headers: { Authorization: req.headers.authorization }
+    });
+    console.log('Gateway: Reset password response:', response.data);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Gateway: Reset password proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Auth service error' });
+  }
+});
+
 // Create admin user (for branch creators)
 router.post('/auth/create-admin', authenticateToken, async (req, res) => {
   try {
@@ -141,6 +172,201 @@ router.post('/auth/create-admin', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Gateway: Create admin proxy error:', error.response?.data || error.message);
     res.status(error.response?.status || 500).json(error.response?.data || { error: 'Auth service error' });
+  }
+});
+
+// Create custom admin user with module permissions
+router.post('/users/create-admin-user', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Create custom admin request:', req.body);
+    
+    const { userid, password, name, phone, branchId, role, modules } = req.body;
+    
+    // Validate required fields
+    if (!userid || !password || !name || !phone || !branchId || !role) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
+    }
+    
+    // Start transaction
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Check if userid already exists
+      const existingUser = await client.query('SELECT id FROM users WHERE userid = $1', [userid]);
+      if (existingUser.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          success: false,
+          error: 'User ID already exists'
+        });
+      }
+      
+      // Generate UUID for new user
+      const userId = uuidv4();
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const email = `${userid.toLowerCase()}@eims.edu`;
+      
+      // Insert user
+      const userResult = await client.query(`
+        INSERT INTO users (id, userid, email, role, name, phone, branch_id, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        RETURNING id, userid, email, role, name
+      `, [userId, userid, email, role, name, phone, branchId]);
+      
+      // Insert password
+      await client.query(`
+        INSERT INTO user_auth (user_id, password_hash, created_at)
+        VALUES ($1, $2, NOW())
+      `, [userId, hashedPassword]);
+      
+      // Insert module permissions if modules are provided
+      if (modules && modules.length > 0) {
+        for (const moduleCode of modules) {
+          await client.query(`
+            INSERT INTO branch.admin_modules (admin_user_id, module_code, branch_id, granted_by, granted_at)
+            VALUES ($1, $2, $3, $4, NOW())
+          `, [userId, moduleCode, branchId, req.user.userId]);
+        }
+      }
+      
+      await client.query('COMMIT');
+      
+      console.log(`✅ Custom admin created successfully: ${userid}`);
+      
+      res.json({
+        success: true,
+        message: 'Custom admin created successfully',
+        user: userResult.rows[0],
+        email: email,
+        modules_count: modules ? modules.length : 0
+      });
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('Error creating custom admin:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create custom admin',
+      details: error.message
+    });
+  }
+});
+
+// Get admin modules
+router.get('/api/admins/:adminId/modules', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Get admin modules request:', req.params.adminId);
+    
+    const { adminId } = req.params;
+    
+    const query = `
+      SELECT 
+        am.module_code,
+        m.module_name,
+        m.description,
+        m.category,
+        am.granted_at,
+        am.is_active
+      FROM branch.admin_modules am
+      LEFT JOIN public.modules m ON am.module_code = m.module_code
+      WHERE am.admin_user_id = $1
+      AND am.is_active = true
+      ORDER BY m.category, m.module_name
+    `;
+    
+    const result = await pool.query(query, [adminId]);
+    
+    res.json({
+      success: true,
+      data: result.rows
+    });
+    
+  } catch (error) {
+    console.error('Error fetching admin modules:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch admin modules',
+      details: error.message
+    });
+  }
+});
+
+// Update admin modules
+router.put('/api/admins/:adminId/modules', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Update admin modules request:', req.params.adminId, req.body);
+    
+    const { adminId } = req.params;
+    const { modules } = req.body;
+    
+    if (!modules || !Array.isArray(modules)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Modules array is required'
+      });
+    }
+    
+    // Get user's branch for validation
+    const userResult = await pool.query('SELECT branch_id FROM users WHERE id = $1', [adminId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Admin user not found'
+      });
+    }
+    
+    const branchId = userResult.rows[0].branch_id;
+    
+    // Start transaction
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Remove existing module permissions
+      await client.query('DELETE FROM branch.admin_modules WHERE admin_user_id = $1', [adminId]);
+      
+      // Add new module permissions
+      for (const moduleCode of modules) {
+        await client.query(`
+          INSERT INTO branch.admin_modules (admin_user_id, module_code, branch_id, granted_by, granted_at)
+          VALUES ($1, $2, $3, $4, NOW())
+        `, [adminId, moduleCode, branchId, req.user.userId]);
+      }
+      
+      await client.query('COMMIT');
+      
+      console.log(`✅ Admin modules updated successfully for admin: ${adminId}`);
+      
+      res.json({
+        success: true,
+        message: 'Admin modules updated successfully',
+        modules_count: modules.length
+      });
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('Error updating admin modules:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update admin modules',
+      details: error.message
+    });
   }
 });
 
@@ -203,6 +429,172 @@ router.post('/api/auth/create-staff', authenticateToken, async (req, res) => {
     res.status(error.response?.status || 500).json(error.response?.data || { error: 'Auth service error' });
   }
 });
+
+// Public Admissions Service proxy routes (no auth required)
+// router.use('/api/public', (req, res) => {
+//   console.log('Gateway: Proxying Public Admissions request:', req.method, req.originalUrl);
+
+//   const forwardedHeaders = {
+//     'content-type': req.headers['content-type'],
+//     'accept': req.headers.accept,
+//     'user-agent': req.headers['user-agent']
+//   };
+
+//   // Extract the path after /api/public and append to base URL
+//   const pathAfterApi = req.originalUrl.replace('/api/public', '').trim();
+
+//   const axiosConfig = {
+//     method: req.method,
+//     url: `${PUBLIC_ADMISSIONS_SERVICE_URL}${pathAfterApi}`,
+//     headers: forwardedHeaders,
+//     data: req.method !== 'GET' ? req.body : undefined,
+//     timeout: 60000,
+//     validateStatus: () => true
+//   };
+
+//   console.log('Gateway: Public Admissions Axios config:', {
+//     method: axiosConfig.method,
+//     url: axiosConfig.url,
+//     hasData: !!axiosConfig.data
+//   });
+
+//   axios(axiosConfig)
+//     .then(response => {
+//       console.log('Gateway: Public Admissions response status:', response.status);
+//       res.status(response.status).json(response.data);
+//     })
+//     .catch(error => {
+//       console.error('Gateway: Public Admissions proxy error:', {
+//         message: error.message,
+//         status: error.response?.status,
+//         data: error.response?.data
+//       });
+//       res.status(error.response?.status || 500).json(
+//         error.response?.data || { error: 'Public Admissions service error', details: error.message }
+//       );
+//     });
+// });
+// Public OTP endpoints for branch creation (no auth required)
+router.post('/api/send-email-otp', async (req, res) => {
+  try {
+    console.log('Gateway: Proxying send-email-otp to BranchService:', req.body);
+    const response = await axios.post(`${BRANCH_SERVICE_URL.replace('/branches', '')}/send-email-otp`, req.body);
+    console.log('Gateway: Send email OTP response:', response.data);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Gateway: Send email OTP proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Branch service error' });
+  }
+});
+
+router.post('/api/verify-email-otp', async (req, res) => {
+  try {
+    console.log('Gateway: Proxying verify-email-otp to BranchService:', req.body);
+    const response = await axios.post(`${BRANCH_SERVICE_URL.replace('/branches', '')}/verify-email-otp`, req.body);
+    console.log('Gateway: Verify email OTP response:', response.data);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Gateway: Verify email OTP proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Branch service error' });
+  }
+});
+
+// Public Admissions Service proxy routes (no auth required for public routes)
+router.use('/public/admissions', async (req, res) => {
+  console.log(
+    'Gateway: Proxying Public Admissions request (public path):',
+    req.method,
+    req.originalUrl
+  );
+
+  try {
+    // Extract the path after /public and append to service URL
+    const pathAfterPublic = req.originalUrl.replace('/public', '').trim();
+
+    const response = await axios({
+      method: req.method,
+      url: `${PUBLIC_ADMISSIONS_SERVICE_URL}${pathAfterPublic}`,
+      headers: {
+        'content-type': req.headers['content-type'] || 'application/json',
+        'accept': req.headers.accept || 'application/json',
+        'user-agent': req.headers['user-agent'],
+        'authorization': req.headers.authorization // Include auth for protected endpoints
+      },
+      data: req.method !== 'GET' && req.method !== 'DELETE' ? req.body : undefined,
+      timeout: 60000
+    });
+
+    console.log(
+      'Gateway: Public Admissions response status (public path):',
+      response.status
+    );
+
+    return res.status(response.status).json(response.data);
+
+  } catch (error) {
+    console.error('Gateway: Public Admissions proxy error (public path):', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+
+    return res.status(error.response?.status || 500).json(
+      error.response?.data || {
+        success: false,
+        error: 'Public Admissions service error'
+      }
+    );
+  }
+});
+
+// Public Admissions Service proxy routes (no auth required for public routes)
+router.use('/api/public/admissions', async (req, res) => {
+  console.log(
+    'Gateway: Proxying Public Admissions request:',
+    req.method,
+    req.originalUrl
+  );
+
+  try {
+    // Extract the path after /api/public and append to service URL
+    const pathAfterApi = req.originalUrl.replace('/api/public', '').trim();
+
+    const response = await axios({
+      method: req.method,
+      url: `${PUBLIC_ADMISSIONS_SERVICE_URL}${pathAfterApi}`,
+      headers: {
+        'content-type': req.headers['content-type'] || 'application/json',
+        'accept': req.headers.accept || 'application/json',
+        'user-agent': req.headers['user-agent'],
+        'authorization': req.headers.authorization // Include auth for protected endpoints
+      },
+      data: req.method !== 'GET' && req.method !== 'DELETE' ? req.body : undefined,
+      timeout: 60000
+    });
+
+    console.log(
+      'Gateway: Public Admissions response status:',
+      response.status
+    );
+
+    return res.status(response.status).json(response.data);
+
+  } catch (error) {
+    console.error('Gateway: Public Admissions proxy error:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+
+    return res.status(error.response?.status || 500).json(
+      error.response?.data || {
+        success: false,
+        error: 'Public Admissions service error'
+      }
+    );
+  }
+});
+
 
 // Protected routes - require authentication
 router.use('/api', authenticateToken);
@@ -1019,6 +1411,104 @@ router.get('/api/branches/with-stats', authenticateToken, async (req, res) => {
   }
 });
 
+// Module API routes - proxy to BranchService
+router.use('/api/modules', (req, res) => {
+  console.log('Gateway: Proxying modules request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Handle branch-specific module requests
+  if (req.originalUrl.match(/\/api\/modules\/branches\/([^/]+)/)) {
+    console.log('Gateway: Handling branch modules request');
+    
+    const branchIdMatch = req.originalUrl.match(/\/api\/modules\/branches\/([^/]+)/);
+    const branchId = branchIdMatch[1];
+    
+    // Convert to BranchService format: /branches/{id}/modules
+    const pathAfterBranch = req.originalUrl.replace(`/api/modules/branches/${branchId}`, '').trim();
+    const targetUrl = `${BRANCH_SERVICE_URL}/branches/${branchId}/modules${pathAfterBranch}`;
+    
+    console.log('Gateway: Converting branch modules request to:', targetUrl);
+    
+    const axiosConfig = {
+      method: req.method,
+      url: targetUrl,
+      headers: forwardedHeaders,
+      data: req.method !== 'GET' ? req.body : undefined,
+      timeout: 60000,
+      validateStatus: () => true
+    };
+
+    console.log('Gateway: Branch Modules API Axios config:', {
+      method: axiosConfig.method,
+      url: axiosConfig.url,
+      hasAuth: !!axiosConfig.headers.authorization,
+      hasData: !!axiosConfig.data
+    });
+
+    axios(axiosConfig)
+      .then(response => {
+        console.log('✅ Gateway: Branch Modules API response status:', response.status);
+        console.log('📋 Gateway: Branch Modules API response data:', response.data);
+        res.status(response.status).json(response.data);
+      })
+      .catch(error => {
+        console.error('❌ Gateway: Branch Modules API proxy error:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        res.status(error.response?.status || 500).json(
+          error.response?.data || { error: 'Branch Modules service error', details: error.message }
+        );
+      });
+    return;
+  }
+
+  // Handle regular module requests (for all available modules)
+  const pathAfterApi = req.originalUrl.replace('/api/modules', '').trim();
+  
+  // Remove /api/branches from BRANCH_SERVICE_URL and add correct modules path
+  const baseUrl = BRANCH_SERVICE_URL.replace('/api/branches', '');
+  const axiosConfig = {
+    method: req.method,
+    url: `${baseUrl}/api/modules${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Modules API Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('✅ Gateway: Modules API response status:', response.status);
+      console.log('📋 Gateway: Modules API response data:', response.data);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('❌ Gateway: Modules API proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Modules service error', details: error.message }
+      );
+    });
+});
+
 // Branch Service proxy routes with special handling for admin endpoints
 router.use('/api/branches', (req, res) => {
   console.log('Gateway: Processing branch request:', req.method, req.originalUrl);
@@ -1027,6 +1517,69 @@ router.use('/api/branches', (req, res) => {
   if (req.originalUrl.includes('/with-stats')) {
     console.log('Gateway: Skipping /with-stats route - handled by specific endpoint');
     return res.status(404).json({ error: 'Route not found in proxy' });
+  }
+
+  // Handle module endpoints specifically for branches
+  if (req.originalUrl.match(/\/api\/branches\/[^/]+\/modules/)) {
+    console.log('Gateway: Handling branch modules request directly');
+    
+    // Extract branch ID from URL
+    const branchIdMatch = req.originalUrl.match(/\/api\/branches\/([^/]+)\/modules/);
+    if (!branchIdMatch) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid branch ID format'
+      });
+    }
+
+    const branchId = branchIdMatch[1];
+    
+    // Convert to BranchService format and handle directly
+    const pathAfterBranch = req.originalUrl.replace(req.originalUrl.match(/\/api\/branches\/[^/]+\/modules/)[0], '').trim();
+    const targetUrl = `${BRANCH_SERVICE_URL}/${branchId}/modules${pathAfterBranch}`;
+    
+    console.log('Gateway: Converting branch modules request to:', targetUrl);
+    
+    const forwardedHeaders = {
+      'authorization': req.headers.authorization,
+      'content-type': req.headers['content-type'],
+      'accept': req.headers.accept,
+      'user-agent': req.headers['user-agent']
+    };
+    
+    const axiosConfig = {
+      method: req.method,
+      url: targetUrl,
+      headers: forwardedHeaders,
+      data: req.method !== 'GET' ? req.body : undefined,
+      timeout: 60000,
+      validateStatus: () => true
+    };
+
+    console.log('Gateway: Branch Modules API Axios config:', {
+      method: axiosConfig.method,
+      url: axiosConfig.url,
+      hasAuth: !!axiosConfig.headers.authorization,
+      hasData: !!axiosConfig.data
+    });
+
+    axios(axiosConfig)
+      .then(response => {
+        console.log('✅ Gateway: Branch Modules API response status:', response.status);
+        console.log('📋 Gateway: Branch Modules API response data:', response.data);
+        res.status(response.status).json(response.data);
+      })
+      .catch(error => {
+        console.error('❌ Gateway: Branch Modules API proxy error:', {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data
+        });
+        res.status(error.response?.status || 500).json(
+          error.response?.data || { error: 'Branch Modules service error', details: error.message }
+        );
+      });
+    return;
   }
 
   // Handle admin endpoints directly in Gateway
@@ -1618,8 +2171,8 @@ router.use('/api/classes/:id/students', (req, res) => {
   };
 
   // Extract the path after /api/classes/:id/students and append to base URL
-  const pathAfterApi = req.originalUrl.replace('/api/classes/:id/students', '').trim();
-  
+  const pathAfterApi = req.originalUrl.replace(`/api/classes/${req.params.id}/students`, '').trim();
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/${req.params.id}/students${pathAfterApi}`,
@@ -1750,7 +2303,7 @@ router.use('/api/teachers/my-students', (req, res) => {
     });
 });
 
-// Classes Service proxy routes - Generic (must come last)
+// Classes Service proxy routes - Generic (must come LAST after all specific routes)
 router.use('/api/classes', (req, res) => {
   console.log('Gateway: Proxying Classes request:', req.method, req.originalUrl);
 
@@ -1764,7 +2317,7 @@ router.use('/api/classes', (req, res) => {
 
   // Extract the path after /api/classes and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/classes', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes${pathAfterApi}`,
@@ -1788,6 +2341,55 @@ router.use('/api/classes', (req, res) => {
     })
     .catch(error => {
       console.error('Gateway: Classes Service proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
+// Classes Service proxy routes for comprehensive timetable management (comes AFTER generic classes route to avoid conflicts)
+router.use('/api/timetables', (req, res) => {
+  console.log('Gateway: Proxying Classes timetables request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent'],
+    'x-user-role': req.headers['x-user-role']
+  };
+
+  // Extract the path after /api/timetables and construct target URL
+  const pathAfterTimetables = req.originalUrl.replace('/api/timetables', '').trim();
+  const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/timetables${pathAfterTimetables}`;
+
+  const axiosConfig = {
+    method: req.method,
+    url: targetUrl,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Classes Service timetables Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Classes service timetables response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Classes Service timetables proxy error:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data
@@ -2134,54 +2736,7 @@ router.use('/api/teachers/my-timetable', (req, res) => {
     });
 });
 
-// Classes Service proxy routes for timetable CRUD operations
-router.use('/api/timetable/:id', (req, res) => {
-  console.log('Gateway: Proxying Classes timetable/:id request:', req.method, req.originalUrl);
 
-  const forwardedHeaders = {
-    'authorization': req.headers.authorization,
-    'content-type': req.headers['content-type'],
-    'accept': req.headers.accept,
-    'user-agent': req.headers['user-agent'],
-    'x-user-role': req.headers['x-user-role']
-  };
-
-  // Extract the timetable ID and construct target URL
-  const timetableId = req.params.id;
-  const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/timetable/${timetableId}`;
-  
-  const axiosConfig = {
-    method: req.method,
-    url: targetUrl,
-    headers: forwardedHeaders,
-    data: req.method !== 'GET' ? req.body : undefined,
-    timeout: 60000,
-    validateStatus: () => true
-  };
-
-  console.log('Gateway: Classes Service timetable/:id Axios config:', {
-    method: axiosConfig.method,
-    url: axiosConfig.url,
-    hasAuth: !!axiosConfig.headers.authorization,
-    hasData: !!axiosConfig.data
-  });
-
-  axios(axiosConfig)
-    .then(response => {
-      console.log('Gateway: Classes service timetable/:id response status:', response.status);
-      res.status(response.status).json(response.data);
-    })
-    .catch(error => {
-      console.error('Gateway: Classes Service timetable/:id proxy error:', {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data
-      });
-      res.status(error.response?.status || 500).json(
-        error.response?.data || { error: 'Classes service error', details: error.message }
-      );
-    });
-});
 
 // Classes Service proxy routes for academic-years
 router.use('/api/academic-years', (req, res) => {
@@ -2926,6 +3481,53 @@ router.use('/api/fee-management', (req, res) => {
       });
       res.status(error.response?.status || 500).json(
         error.response?.data || { error: 'Fee management service error', details: error.message }
+      );
+    });
+});
+
+// Examination Service proxy routes - both /api and legacy /examination
+router.use(['/api/examination', '/examination'], (req, res) => {
+  console.log('Gateway: Proxying Examination service request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/examination or /examination and append to base URL
+  const pathAfterApi = req.originalUrl.replace(/^\/(?:api\/)?examination/, '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${EXAMINATION_SERVICE_URL}/api/examination${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Examination Service Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Examination service response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Examination Service proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Examination service error', details: error.message }
       );
     });
 });
@@ -3686,6 +4288,103 @@ router.use('/api/library', (req, res) => {
       });
       res.status(error.response?.status || 500).json(
         error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// ClassesService proxy routes for subjects
+router.use('/api/subjects', (req, res) => {
+  console.log('Gateway: Proxying subjects request to ClassesService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/subjects and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/subjects', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${CLASSES_SERVICE_URL}/api/classes/subjects${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: ClassesService subjects Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: ClassesService subjects response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: ClassesService subjects proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
+// ========== SYLLABUS MANAGEMENT ENDPOINTS ==========
+
+// Classes Service proxy routes for syllabus management
+router.use('/api/syllabus', (req, res) => {
+  console.log('Gateway: Proxying Classes syllabus request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent'],
+    'x-user-role': req.headers['x-user-role']
+  };
+
+  // Extract the path after /api/syllabus and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/syllabus', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${CLASSES_SERVICE_URL}/api/classes/syllabus${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Classes Service syllabus Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Classes service syllabus response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Classes Service syllabus proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
       );
     });
 });
