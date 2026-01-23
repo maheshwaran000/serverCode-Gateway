@@ -7,44 +7,55 @@ const bcrypt = require('bcryptjs');
 
 
 // Environment-based service URLs
-const isDevelopment = process.env.NODE_ENV !== 'production';
+// const isDevelopment = process.env.NODE_ENV !== 'production';
 
 // Development URLs (local services)
-const AUTH_SERVICE_URL = isDevelopment
-  ? 'http://localhost:8001/api/auth'
-  : 'https://servercode-authservice-production.up.railway.app/api/auth';
+// const AUTH_SERVICE_URL = isDevelopment
+//   ? 'http://localhost:8001/api/auth'
+//   : 'https://servercode-authservice-production.up.railway.app/api/auth';
 
-const BRANCH_SERVICE_URL = isDevelopment
-  ? 'http://localhost:8002/api/branches'
-  : 'https://servercode-branchservice-production.up.railway.app/api/branches';
+// const BRANCH_SERVICE_URL = isDevelopment
+//   ? 'http://localhost:8002/api/branches'
+//   : 'https://servercode-branchservice-production.up.railway.app/api/branches';
 
-const USER_SERVICE_URL = isDevelopment
-  ? 'http://localhost:8003/api/users'
-  : 'https://servercode-userservice-production.up.railway.app/api/users';
+// const USER_SERVICE_URL = isDevelopment
+//   ? 'http://localhost:8003/api/users'
+//   : 'https://servercode-userservice-production.up.railway.app/api/users';
 
-const CLASSES_SERVICE_URL = isDevelopment
-  ? 'http://localhost:8004'
-  : 'https://servercodeclassesservice-production.up.railway.app';
+// const CLASSES_SERVICE_URL = isDevelopment
+//   ? 'http://localhost:8004'
+//   : 'https://servercodeclassesservice-production.up.railway.app';
 
-const HRMS_SERVICE_URL = isDevelopment
-  ? 'http://localhost:8005/api'
-  : 'https://servercode-hrmsservice-production.up.railway.app/api';
+// const HRMS_SERVICE_URL = isDevelopment
+//   ? 'http://localhost:8005/api'
+//   : 'https://servercode-hrmsservice-production.up.railway.app/api';
 
-const ADMIN_SERVICE_URL = isDevelopment
-  ? 'http://localhost:8006'
-  : 'https://servercode-adminservice-production.up.railway.app';
+// const ADMIN_SERVICE_URL = isDevelopment
+//   ? 'http://localhost:8006'
+//   : 'https://servercode-adminservice-production.up.railway.app';
 
-const FEE_MANAGEMENT_SERVICE_URL = isDevelopment
-  ? 'http://localhost:8007'
-  : 'https://servercodefeemanagement-production.up.railway.app';
+// const FEE_MANAGEMENT_SERVICE_URL = isDevelopment
+//   ? 'http://localhost:8007'
+//   : 'https://servercodefeemanagement-production.up.railway.app';
 
-const EXAMINATION_SERVICE_URL = isDevelopment
-  ? 'http://localhost:8009'
-  : 'https://servercodeexamination-production.up.railway.app';
+// const EXAMINATION_SERVICE_URL = isDevelopment
+//   ? 'http://localhost:8009'
+//   : 'https://servercodeexamination-production.up.railway.app';
 
-const PUBLIC_ADMISSIONS_SERVICE_URL = isDevelopment
-  ? 'http://localhost:3008/public'
-  : 'https://servercode-publicadmissions-production.up.railway.app/public';
+// const PUBLIC_ADMISSIONS_SERVICE_URL = isDevelopment
+//   ? 'http://localhost:3008/public'
+//   : 'https://servercode-publicadmissions-production.up.railway.app/public';
+
+const AUTH_SERVICE_URL = 'http://localhost:8001/api/auth';
+const BRANCH_SERVICE_URL = 'http://localhost:8002/api/branches';
+const USER_SERVICE_URL = 'http://localhost:8003/api/users';
+const CLASSES_SERVICE_URL = 'http://localhost:8004';
+const HRMS_SERVICE_URL = 'http://localhost:8005/api';
+const ADMIN_SERVICE_URL = 'http://localhost:8006';
+const FEE_MANAGEMENT_SERVICE_URL = 'http://localhost:8007';
+const EXAMINATION_SERVICE_URL = 'http://localhost:8009';
+const PUBLIC_ADMISSIONS_SERVICE_URL = 'http://localhost:3008/public';
+
 
 const router = express.Router();
 
