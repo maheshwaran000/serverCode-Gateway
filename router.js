@@ -130,7 +130,7 @@ router.get('/health', (req, res) => {
 });
 
 // Auth routes - proxy to Auth Service
-router.post('/auth/login', async (req, res) => {
+router.post('/api/auth/login', async (req, res) => {
   try {
     console.log('Gateway: Login request:', req.body);
     const response = await axios.post(`${AUTH_SERVICE_URL}/login`, req.body);
@@ -142,7 +142,7 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
-router.get('/auth/verify', authenticateToken, async (req, res) => {
+router.get('/api/auth/verify', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Verify request for user:', req.user);
     const response = await axios.get(`${AUTH_SERVICE_URL}/verify`, {
@@ -157,7 +157,7 @@ router.get('/auth/verify', authenticateToken, async (req, res) => {
 });
 
 // Reset password for any user by userid
-router.post('/auth/reset-password', authenticateToken, async (req, res) => {
+router.post('/api/auth/reset-password', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Reset password request:', req.body);
     const response = await axios.post(`${AUTH_SERVICE_URL}/reset-password`, req.body, {
@@ -172,7 +172,7 @@ router.post('/auth/reset-password', authenticateToken, async (req, res) => {
 });
 
 // Create admin user (for branch creators)
-router.post('/auth/create-admin', authenticateToken, async (req, res) => {
+router.post('/api/auth/create-admin', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Create admin request:', req.body);
     const response = await axios.post(`${AUTH_SERVICE_URL}/create-admin`, req.body, {
