@@ -1,0 +1,50 @@
+[dotenv@17.2.3] injecting env (8) from .env -- tip: ✅ audit secrets and track compliance: https://dotenvx.com/ops
+Gateway Database Pool Configuration: {
+  host: 'database-1.c63iu8cmu6ne.us-east-1.rds.amazonaws.com',
+  port: '5432',
+  database: 'campus360_db',
+  user: 'postgres',
+  ssl: 'true'
+}
+[dotenv@17.2.3] injecting env (0) from .env -- tip: 🗂️ backup and recover secrets: https://dotenvx.com/ops
+API Gateway running on port 8000
+Decoded user from token: {
+  userId: '905e7edb-5ac9-47e6-9dd7-7dc719098116',
+  userid: 'BBBBA000001',
+  role: 'admin',
+  branchId: '2713ac74-6f20-4fcf-8d2e-aaae97a3dba3',
+  branchName: 'branching',
+  email: 'BBBBA000001@eims.edu',
+  iat: 1769347539,
+  exp: 1769433939
+}
+Gateway: Proxying Classes academic-years request: GET /api/academic-years/active
+Gateway: Classes Service academic-years Axios config: {
+  method: 'GET',
+  url: 'http://localhost:8004/api/classes/academic-years/active',
+  hasAuth: true,
+  hasData: false
+}
+Gateway: Classes service academic-years response status: 200
+Decoded user from token: {
+  userId: '905e7edb-5ac9-47e6-9dd7-7dc719098116',
+  userid: 'BBBBA000001',
+  role: 'admin',
+  branchId: '2713ac74-6f20-4fcf-8d2e-aaae97a3dba3',
+  branchName: 'branching',
+  email: 'BBBBA000001@eims.edu',
+  iat: 1769347539,
+  exp: 1769433939
+}
+Gateway: Proxying AdminService academic-exams request: POST /api/academic-exams
+Gateway: AdminService academic-exams Axios config: {
+  method: 'POST',
+  url: 'http://localhost:8006/api/academic-exams',
+  hasAuth: true,
+  hasData: true
+}
+Gateway: AdminService academic-exams response status: 500
+Gateway: Academic exams response data: {
+  error: 'Internal server error',
+  details: 'malformed array literal: "["adf4381b-6d50-4d99-b05f-ad0903d0252b","2cc6fe16-d801-4604-ad95-10842d39e256"]"'
+}

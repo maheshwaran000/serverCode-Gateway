@@ -100,7 +100,7 @@ router.get('/test-db', async (req, res) => {
 const authenticateToken = (req, res, next) => {
   // Skip authentication for public routes
   if (req.originalUrl.includes('/api/examination/sessions') ||
-      req.originalUrl.includes('/api/public/admissions')) {
+    req.originalUrl.includes('/api/public/admissions')) {
     console.log(`🔓 Public route accessed: ${req.method} ${req.originalUrl}`);
     req.user = { id: 'public-user', role: 'public' };
     return next();
@@ -190,9 +190,9 @@ router.post('/api/auth/create-admin', authenticateToken, async (req, res) => {
 router.post('/users/create-admin-user', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Create custom admin request:', req.body);
-    
+
     const { userid, password, name, phone, branchId, role, modules } = req.body;
-    
+
     // Validate required fields
     if (!userid || !password || !name || !phone || !branchId || !role) {
       return res.status(400).json({
@@ -200,12 +200,12 @@ router.post('/users/create-admin-user', authenticateToken, async (req, res) => {
         error: 'Missing required fields'
       });
     }
-    
+
     // Start transaction
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       // Check if userid already exists
       const existingUser = await client.query('SELECT id FROM users WHERE userid = $1', [userid]);
       if (existingUser.rows.length > 0) {
@@ -215,25 +215,25 @@ router.post('/users/create-admin-user', authenticateToken, async (req, res) => {
           error: 'User ID already exists'
         });
       }
-      
+
       // Generate UUID for new user
       const userId = uuidv4();
       const hashedPassword = await bcrypt.hash(password, 10);
       const email = `${userid.toLowerCase()}@eims.edu`;
-      
+
       // Insert user
       const userResult = await client.query(`
         INSERT INTO users (id, userid, email, role, name, phone, branch_id, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
         RETURNING id, userid, email, role, name
       `, [userId, userid, email, role, name, phone, branchId]);
-      
+
       // Insert password
       await client.query(`
         INSERT INTO user_auth (user_id, password_hash, created_at)
         VALUES ($1, $2, NOW())
       `, [userId, hashedPassword]);
-      
+
       // Insert module permissions if modules are provided
       if (modules && modules.length > 0) {
         for (const moduleCode of modules) {
@@ -243,11 +243,11 @@ router.post('/users/create-admin-user', authenticateToken, async (req, res) => {
           `, [userId, moduleCode, branchId, req.user.userId]);
         }
       }
-      
+
       await client.query('COMMIT');
-      
+
       console.log(`✅ Custom admin created successfully: ${userid}`);
-      
+
       res.json({
         success: true,
         message: 'Custom admin created successfully',
@@ -255,14 +255,14 @@ router.post('/users/create-admin-user', authenticateToken, async (req, res) => {
         email: email,
         modules_count: modules ? modules.length : 0
       });
-      
+
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
-    
+
   } catch (error) {
     console.error('Error creating custom admin:', error);
     res.status(500).json({
@@ -277,9 +277,9 @@ router.post('/users/create-admin-user', authenticateToken, async (req, res) => {
 router.get('/api/admins/:adminId/modules', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Get admin modules request:', req.params.adminId);
-    
+
     const { adminId } = req.params;
-    
+
     const query = `
       SELECT 
         am.module_code,
@@ -294,14 +294,14 @@ router.get('/api/admins/:adminId/modules', authenticateToken, async (req, res) =
       AND am.is_active = true
       ORDER BY m.category, m.module_name
     `;
-    
+
     const result = await pool.query(query, [adminId]);
-    
+
     res.json({
       success: true,
       data: result.rows
     });
-    
+
   } catch (error) {
     console.error('Error fetching admin modules:', error);
     res.status(500).json({
@@ -316,17 +316,17 @@ router.get('/api/admins/:adminId/modules', authenticateToken, async (req, res) =
 router.put('/api/admins/:adminId/modules', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Update admin modules request:', req.params.adminId, req.body);
-    
+
     const { adminId } = req.params;
     const { modules } = req.body;
-    
+
     if (!modules || !Array.isArray(modules)) {
       return res.status(400).json({
         success: false,
         error: 'Modules array is required'
       });
     }
-    
+
     // Get user's branch for validation
     const userResult = await pool.query('SELECT branch_id FROM users WHERE id = $1', [adminId]);
     if (userResult.rows.length === 0) {
@@ -335,17 +335,17 @@ router.put('/api/admins/:adminId/modules', authenticateToken, async (req, res) =
         error: 'Admin user not found'
       });
     }
-    
+
     const branchId = userResult.rows[0].branch_id;
-    
+
     // Start transaction
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       // Remove existing module permissions
       await client.query('DELETE FROM branch.admin_modules WHERE admin_user_id = $1', [adminId]);
-      
+
       // Add new module permissions
       for (const moduleCode of modules) {
         await client.query(`
@@ -353,24 +353,24 @@ router.put('/api/admins/:adminId/modules', authenticateToken, async (req, res) =
           VALUES ($1, $2, $3, $4, NOW())
         `, [adminId, moduleCode, branchId, req.user.userId]);
       }
-      
+
       await client.query('COMMIT');
-      
+
       console.log(`✅ Admin modules updated successfully for admin: ${adminId}`);
-      
+
       res.json({
         success: true,
         message: 'Admin modules updated successfully',
         modules_count: modules.length
       });
-      
+
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
-    
+
   } catch (error) {
     console.error('Error updating admin modules:', error);
     res.status(500).json({
@@ -382,7 +382,7 @@ router.put('/api/admins/:adminId/modules', authenticateToken, async (req, res) =
 });
 
 // Create student user
-router.post('/auth/create-student', authenticateToken, async (req, res) => {
+router.post('/api/auth/create-student', authenticateToken, async (req, res) => {
   try {
     console.log('Gateway: Create student request:', req.body);
 
@@ -629,15 +629,15 @@ router.get('/api/profile', async (req, res) => {
 router.post('/api/branches/:id/toggle-status', async (req, res) => {
   try {
     console.log('Gateway: Direct branch status toggle request:', req.params.id);
-    
+
     // Check user permissions
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) {
       return res.status(401).json({ error: 'Access token required' });
     }
-    
+
     jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
       if (err || (user.role !== 'superadmin' && user.role !== 'access_manager')) {
         return res.status(403).json({
@@ -645,24 +645,24 @@ router.post('/api/branches/:id/toggle-status', async (req, res) => {
           error: 'Access denied: Only superadmin or access_manager can toggle branch status'
         });
       }
-      
+
       try {
         // Get current branch status
         const currentStatusResult = await pool.query(
           `SELECT status, branch_name, branch_code FROM superadmin.branches WHERE id = $1`,
           [req.params.id]
         );
-        
+
         if (currentStatusResult.rows.length === 0) {
           return res.status(404).json({
             success: false,
             error: 'Branch not found'
           });
         }
-        
+
         const currentStatus = currentStatusResult.rows[0].status;
         let newStatus;
-        
+
         // Toggle logic: Active ↔ Inactive
         if (currentStatus === 'Active') {
           newStatus = 'Inactive';
@@ -672,7 +672,7 @@ router.post('/api/branches/:id/toggle-status', async (req, res) => {
           // For other statuses (Pending, Rejected), set to Active by default
           newStatus = 'Active';
         }
-        
+
         // Update branch status
         const updateResult = await pool.query(
           `UPDATE superadmin.branches
@@ -681,9 +681,9 @@ router.post('/api/branches/:id/toggle-status', async (req, res) => {
            RETURNING *`,
           [newStatus, req.params.id]
         );
-        
+
         const actionDescription = currentStatus === 'Active' ? 'deactivated' : 'activated';
-        
+
         // Log audit event
         try {
           await pool.query(`
@@ -699,9 +699,9 @@ router.post('/api/branches/:id/toggle-status', async (req, res) => {
         } catch (auditError) {
           console.log('⚠️ Audit logging skipped for branch status toggle');
         }
-        
+
         console.log(`✅ Branch ${req.params.id} ${actionDescription} by user ${user.userId} (${currentStatus} → ${newStatus})`);
-        
+
         res.json({
           success: true,
           message: `Branch ${actionDescription} successfully`,
@@ -714,7 +714,7 @@ router.post('/api/branches/:id/toggle-status', async (req, res) => {
             }
           }
         });
-        
+
       } catch (dbError) {
         console.error('Database error in branch status toggle:', dbError);
         res.status(500).json({
@@ -724,7 +724,7 @@ router.post('/api/branches/:id/toggle-status', async (req, res) => {
         });
       }
     });
-    
+
   } catch (error) {
     console.error('Branch status toggle error:', error);
     res.status(500).json({
@@ -739,15 +739,15 @@ router.post('/api/branches/:id/toggle-status', async (req, res) => {
 router.post('/api/branches/:id/update-status', async (req, res) => {
   try {
     console.log('Gateway: Direct branch status update request:', req.params.id, 'New status:', req.body.status);
-    
+
     // Check user permissions
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) {
       return res.status(401).json({ error: 'Access token required' });
     }
-    
+
     jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
       if (err || (user.role !== 'superadmin' && user.role !== 'access_manager')) {
         return res.status(403).json({
@@ -755,10 +755,10 @@ router.post('/api/branches/:id/update-status', async (req, res) => {
           error: 'Access denied: Only superadmin or access_manager can update branch status'
         });
       }
-      
+
       try {
         const { status } = req.body;
-        
+
         // Validate status
         const validStatuses = ['Active', 'Inactive', 'Pending', 'Rejected'];
         if (!validStatuses.includes(status)) {
@@ -767,22 +767,22 @@ router.post('/api/branches/:id/update-status', async (req, res) => {
             error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
           });
         }
-        
+
         // Get current branch info
         const currentInfoResult = await pool.query(
           `SELECT status, branch_name, branch_code FROM superadmin.branches WHERE id = $1`,
           [req.params.id]
         );
-        
+
         if (currentInfoResult.rows.length === 0) {
           return res.status(404).json({
             success: false,
             error: 'Branch not found'
           });
         }
-        
+
         const currentStatus = currentInfoResult.rows[0].status;
-        
+
         // Update branch status
         const updateResult = await pool.query(
           `UPDATE superadmin.branches
@@ -791,7 +791,7 @@ router.post('/api/branches/:id/update-status', async (req, res) => {
            RETURNING *`,
           [status, req.params.id]
         );
-        
+
         // Log audit event
         try {
           await pool.query(`
@@ -807,9 +807,9 @@ router.post('/api/branches/:id/update-status', async (req, res) => {
         } catch (auditError) {
           console.log('⚠️ Audit logging skipped for branch status update');
         }
-        
+
         console.log(`✅ Branch ${req.params.id} status updated by user ${user.userId} (${currentStatus} → ${status})`);
-        
+
         res.json({
           success: true,
           message: 'Branch status updated successfully',
@@ -822,7 +822,7 @@ router.post('/api/branches/:id/update-status', async (req, res) => {
             }
           }
         });
-        
+
       } catch (dbError) {
         console.error('Database error in branch status update:', dbError);
         res.status(500).json({
@@ -832,7 +832,7 @@ router.post('/api/branches/:id/update-status', async (req, res) => {
         });
       }
     });
-    
+
   } catch (error) {
     console.error('Branch status update error:', error);
     res.status(500).json({
@@ -847,15 +847,15 @@ router.post('/api/branches/:id/update-status', async (req, res) => {
 router.post('/api/branches/:id/approve', async (req, res) => {
   try {
     console.log('Gateway: Direct branch approve request:', req.params.id);
-    
+
     // Check user permissions
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) {
       return res.status(401).json({ error: 'Access token required' });
     }
-    
+
     jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
       if (err || (user.role !== 'superadmin' && user.role !== 'access_manager')) {
         return res.status(403).json({
@@ -863,7 +863,7 @@ router.post('/api/branches/:id/approve', async (req, res) => {
           error: 'Access denied: Only superadmin or access_manager can approve branches'
         });
       }
-      
+
       try {
         // Update branch status to Active
         const updateResult = await pool.query(
@@ -873,14 +873,14 @@ router.post('/api/branches/:id/approve', async (req, res) => {
            RETURNING *`,
           [req.params.id]
         );
-        
+
         if (updateResult.rows.length === 0) {
           return res.status(404).json({
             success: false,
             error: 'Branch not found'
           });
         }
-        
+
         // Log audit event
         try {
           await pool.query(`
@@ -896,15 +896,15 @@ router.post('/api/branches/:id/approve', async (req, res) => {
         } catch (auditError) {
           console.log('⚠️ Audit logging skipped for branch approval');
         }
-        
+
         console.log(`✅ Branch ${req.params.id} approved by user ${user.userId}`);
-        
+
         res.json({
           success: true,
           message: 'Branch approved successfully',
           data: updateResult.rows[0]
         });
-        
+
       } catch (dbError) {
         console.error('Database error in branch approval:', dbError);
         res.status(500).json({
@@ -914,7 +914,7 @@ router.post('/api/branches/:id/approve', async (req, res) => {
         });
       }
     });
-    
+
   } catch (error) {
     console.error('Branch approval error:', error);
     res.status(500).json({
@@ -928,15 +928,15 @@ router.post('/api/branches/:id/approve', async (req, res) => {
 router.post('/api/branches/:id/reject', async (req, res) => {
   try {
     console.log('Gateway: Direct branch reject request:', req.params.id);
-    
+
     // Check user permissions
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) {
       return res.status(401).json({ error: 'Access token required' });
     }
-    
+
     jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
       if (err || (user.role !== 'superadmin' && user.role !== 'access_manager')) {
         return res.status(403).json({
@@ -944,7 +944,7 @@ router.post('/api/branches/:id/reject', async (req, res) => {
           error: 'Access denied: Only superadmin or access_manager can reject branches'
         });
       }
-      
+
       try {
         // Update branch status to Rejected
         const updateResult = await pool.query(
@@ -954,14 +954,14 @@ router.post('/api/branches/:id/reject', async (req, res) => {
            RETURNING *`,
           [req.params.id]
         );
-        
+
         if (updateResult.rows.length === 0) {
           return res.status(404).json({
             success: false,
             error: 'Branch not found'
           });
         }
-        
+
         // Log audit event
         try {
           await pool.query(`
@@ -977,15 +977,15 @@ router.post('/api/branches/:id/reject', async (req, res) => {
         } catch (auditError) {
           console.log('⚠️ Audit logging skipped for branch rejection');
         }
-        
+
         console.log(`✅ Branch ${req.params.id} rejected by user ${user.userId}`);
-        
+
         res.json({
           success: true,
           message: 'Branch rejected successfully',
           data: updateResult.rows[0]
         });
-        
+
       } catch (dbError) {
         console.error('Database error in branch rejection:', dbError);
         res.status(500).json({
@@ -995,7 +995,7 @@ router.post('/api/branches/:id/reject', async (req, res) => {
         });
       }
     });
-    
+
   } catch (error) {
     console.error('Branch rejection error:', error);
     res.status(500).json({
@@ -1340,7 +1340,7 @@ router.use('/api/branches/hostels', (req, res) => {
         error.response?.data || { error: 'Admin service error', details: error.message }
       );
     });
-  });    
+});
 // Get all branches with aggregated statistics
 router.get('/api/branches/with-stats', authenticateToken, async (req, res) => {
   try {
@@ -1436,16 +1436,16 @@ router.use('/api/modules', (req, res) => {
   // Handle branch-specific module requests
   if (req.originalUrl.match(/\/api\/modules\/branches\/([^/]+)/)) {
     console.log('Gateway: Handling branch modules request');
-    
+
     const branchIdMatch = req.originalUrl.match(/\/api\/modules\/branches\/([^/]+)/);
     const branchId = branchIdMatch[1];
-    
+
     // Convert to BranchService format: /branches/{id}/modules
     const pathAfterBranch = req.originalUrl.replace(`/api/modules/branches/${branchId}`, '').trim();
     const targetUrl = `${BRANCH_SERVICE_URL}/branches/${branchId}/modules${pathAfterBranch}`;
-    
+
     console.log('Gateway: Converting branch modules request to:', targetUrl);
-    
+
     const axiosConfig = {
       method: req.method,
       url: targetUrl,
@@ -1483,7 +1483,7 @@ router.use('/api/modules', (req, res) => {
 
   // Handle regular module requests (for all available modules)
   const pathAfterApi = req.originalUrl.replace('/api/modules', '').trim();
-  
+
   // Remove /api/branches from BRANCH_SERVICE_URL and add correct modules path
   const baseUrl = BRANCH_SERVICE_URL.replace('/api/branches', '');
   const axiosConfig = {
@@ -1533,7 +1533,7 @@ router.use('/api/branches', (req, res) => {
   // Handle module endpoints specifically for branches
   if (req.originalUrl.match(/\/api\/branches\/[^/]+\/modules/)) {
     console.log('Gateway: Handling branch modules request directly');
-    
+
     // Extract branch ID from URL
     const branchIdMatch = req.originalUrl.match(/\/api\/branches\/([^/]+)\/modules/);
     if (!branchIdMatch) {
@@ -1544,20 +1544,20 @@ router.use('/api/branches', (req, res) => {
     }
 
     const branchId = branchIdMatch[1];
-    
+
     // Convert to BranchService format and handle directly
     const pathAfterBranch = req.originalUrl.replace(req.originalUrl.match(/\/api\/branches\/[^/]+\/modules/)[0], '').trim();
     const targetUrl = `${BRANCH_SERVICE_URL}/${branchId}/modules${pathAfterBranch}`;
-    
+
     console.log('Gateway: Converting branch modules request to:', targetUrl);
-    
+
     const forwardedHeaders = {
       'authorization': req.headers.authorization,
       'content-type': req.headers['content-type'],
       'accept': req.headers.accept,
       'user-agent': req.headers['user-agent']
     };
-    
+
     const axiosConfig = {
       method: req.method,
       url: targetUrl,
@@ -1596,7 +1596,7 @@ router.use('/api/branches', (req, res) => {
   // Handle admin endpoints directly in Gateway
   if (req.originalUrl.includes('/admins')) {
     console.log('Gateway: Handling admin endpoint directly');
-    
+
     // Extract branch ID from URL
     const branchIdMatch = req.originalUrl.match(/\/api\/branches\/([^/]+)\/admins/);
     if (!branchIdMatch) {
@@ -1607,10 +1607,10 @@ router.use('/api/branches', (req, res) => {
     }
 
     const branchId = branchIdMatch[1];
-    
+
     try {
       console.log('Gateway: Fetching admin users for branch:', branchId);
-      
+
       const query = `
         SELECT
           u.userid,
@@ -1622,7 +1622,7 @@ router.use('/api/branches', (req, res) => {
         WHERE u.role = 'admin' AND u.branch_id = $1
         ORDER BY u.created_at ASC
       `;
-      
+
       pool.query(query, [branchId], (error, result) => {
         if (error) {
           console.error('Gateway: Error fetching branch admin users:', error);
@@ -1632,14 +1632,14 @@ router.use('/api/branches', (req, res) => {
             details: error.message
           });
         }
-        
+
         console.log('Gateway: Successfully fetched admin users:', result.rows.length);
         res.json({
           success: true,
           data: result.rows
         });
       });
-      
+
     } catch (error) {
       console.error('Gateway: Error in admin endpoint:', error);
       res.status(500).json({
@@ -1661,7 +1661,7 @@ router.use('/api/branches', (req, res) => {
 
   // Extract the path after /api/branches and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/branches', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${BRANCH_SERVICE_URL}${pathAfterApi}`,
@@ -1709,7 +1709,7 @@ router.use('/api/v1/superadmin/branches', (req, res) => {
 
   // Extract the path after /api/v1/superadmin/branches and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/v1/superadmin/branches', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${BRANCH_SERVICE_URL}${pathAfterApi}`,
@@ -1785,7 +1785,7 @@ router.use('/api/users/branch/:branchId', (req, res) => {
         error.response?.data || { error: 'User service error', details: error.message }
       );
     });
-  });      
+});
 // User Service proxy routes for individual student details
 router.use('/api/users/students/:id', (req, res) => {
   console.log('Gateway: Proxying students/:id request:', req.method, req.originalUrl);
@@ -2006,7 +2006,7 @@ router.use('/api/classes/teachers/:teacherId/class', (req, res) => {
 
   // Construct the target URL correctly
   const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/teachers/${req.params.teacherId}/class`;
-  
+
   const axiosConfig = {
     method: req.method,
     url: targetUrl,
@@ -2054,7 +2054,7 @@ router.use('/api/classes/teachers/:teacherId/timetable', (req, res) => {
 
   // Construct the target URL correctly
   const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/teachers/${req.params.teacherId}/timetable`;
-  
+
   const axiosConfig = {
     method: req.method,
     url: targetUrl,
@@ -2106,7 +2106,7 @@ router.use('/api/classes/teachers/:teacherId/timetable', (req, res) => {
 
 //   // Construct the target URL correctly
 //   const targetUrl = `${CLASSES_SERVICE_URL}/api/classes/teachers/${req.params.teacherId}/students`;
-  
+
 //   const axiosConfig = {
 //     method: req.method,
 //     url: targetUrl,
@@ -2232,7 +2232,7 @@ router.use('/api/teachers/my-class', (req, res) => {
   // Extract the path after /api/teachers/my-class and append to base URL
   // Clean the URL by trimming whitespace and newlines
   const pathAfterApi = req.originalUrl.replace('/api/teachers/my-class', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/teachers/my-class${pathAfterApi}`,
@@ -2280,7 +2280,7 @@ router.use('/api/teachers/my-students', (req, res) => {
 
   // Extract the path after /api/teachers/my-students and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/teachers/my-students', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/teachers/my-students${pathAfterApi}`,
@@ -2425,7 +2425,7 @@ router.use('/api/teachers/available', (req, res) => {
 
   // Extract the path after /api/teachers/available and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/teachers/available', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/teachers/available${pathAfterApi}`,
@@ -2473,7 +2473,7 @@ router.use('/api/teachers/eligibility', (req, res) => {
 
   // Extract the path after /api/teachers/eligibility and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/teachers/eligibility', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes${pathAfterApi}`,
@@ -2521,7 +2521,7 @@ router.use('/api/teachers/notify', (req, res) => {
 
   // Extract the path after /api/teachers/notify and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/teachers/notify', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes${pathAfterApi}`,
@@ -2569,7 +2569,7 @@ router.use('/api/teachers/my-notifications', (req, res) => {
 
   // Extract the path after /api/teachers/my-notifications and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/teachers/my-notifications', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/teachers/my-notifications${pathAfterApi}`,
@@ -2617,7 +2617,7 @@ router.use('/api/teachers/notification-status', (req, res) => {
 
   // Extract the path after /api/teachers/notification-status and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/teachers/notification-status', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/teachers/notification-status${pathAfterApi}`,
@@ -2665,7 +2665,7 @@ router.use('/api/teachers/all', (req, res) => {
 
   // Extract the path after /api/teachers/all and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/teachers/all', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/teachers/all${pathAfterApi}`,
@@ -2713,7 +2713,7 @@ router.use('/api/teachers/my-timetable', (req, res) => {
 
   // Extract the path after /api/teachers/my-timetable and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/teachers/my-timetable', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/teachers/my-timetable${pathAfterApi}`,
@@ -2763,7 +2763,7 @@ router.use('/api/academic-years', (req, res) => {
 
   // Extract the path after /api/academic-years and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/academic-years', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/academic-years${pathAfterApi}`,
@@ -2797,6 +2797,46 @@ router.use('/api/academic-years', (req, res) => {
     });
 });
 
+// Public endpoint for academic years (no authentication required)
+router.get('/api/academic-years/all', (req, res) => {
+  console.log('Gateway: Public academic-years request (no auth required)');
+
+  const forwardedHeaders = {
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: 'GET',
+    url: `${CLASSES_SERVICE_URL}/api/classes/academic-years/all`,
+    headers: forwardedHeaders,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: Public academic-years Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: Public academic-years response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: Public academic-years proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
 // Classes Service proxy routes for attendance endpoints
 router.use('/api/classes/:id/attendance', (req, res) => {
   console.log('Gateway: Proxying Classes attendance request:', req.method, req.originalUrl);
@@ -2811,7 +2851,7 @@ router.use('/api/classes/:id/attendance', (req, res) => {
 
   // Extract the path after /api/classes/:id/attendance and append to base URL
   const pathAfterApi = req.originalUrl.replace(`/api/classes/${req.params.id}/attendance`, '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/${req.params.id}/attendance${pathAfterApi}`,
@@ -2862,7 +2902,7 @@ router.use('/api/classes/:id/attendance', (req, res) => {
 
 //   // Extract the path after /api/attendance/:id and append to base URL
 //   const pathAfterApi = req.originalUrl.replace(`/api/attendance/${req.params.id}`, '');
-  
+
 //   const axiosConfig = {
 //     method: req.method,
 //     url: `${CLASSES_SERVICE_URL}/api/classes/attendance/${req.params.id}${pathAfterApi}`,
@@ -2942,7 +2982,7 @@ router.use('/api/attendance/date/:date', (req, res) => {
 
   // Extract the path after /api/attendance/date/:date and append to base URL
   const pathAfterApi = req.originalUrl.replace(`/api/attendance/date/${req.params.date}`, '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${CLASSES_SERVICE_URL}/api/classes/attendance/date/${req.params.date}${pathAfterApi}`,
@@ -2989,7 +3029,7 @@ router.use('/api/hrms', (req, res) => {
 
   // Extract the path after /api/hrms and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/hrms', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${HRMS_SERVICE_URL}${pathAfterApi}`,
@@ -3036,7 +3076,7 @@ router.use('/api/admin-service', (req, res) => {
 
   // Extract the path after /api/admin-service and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/admin-service', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${ADMIN_SERVICE_URL}/api${pathAfterApi}`,
@@ -3083,7 +3123,7 @@ router.use('/api/bus-routes', (req, res) => {
 
   // Extract the path after /api/bus-routes and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/bus-routes', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${ADMIN_SERVICE_URL}/api/bus-routes${pathAfterApi}`,
@@ -3131,7 +3171,7 @@ router.use('/api/hostels', (req, res) => {
 
   // Extract the path after /api/hostels and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/hostels', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${ADMIN_SERVICE_URL}/api/hostels${pathAfterApi}`,
@@ -3166,6 +3206,73 @@ router.use('/api/hostels', (req, res) => {
     });
 });
 
+// AdminService proxy route for student hostel details
+router.use('/api/student-hostel', (req, res) => {
+  console.log('Gateway: Proxying AdminService student-hostel request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const pathAfterApi = req.originalUrl.replace('/api/student-hostel', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/student-hostel${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  axios(axiosConfig)
+    .then(response => {
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// BranchService proxy route for student transport details
+router.use('/api/student-transport', (req, res) => {
+  console.log('Gateway: Proxying BranchService student-transport request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const pathAfterApi = req.originalUrl.replace('/api/student-transport', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    // BRANCH_SERVICE_URL is already .../api/branches
+    url: `${BRANCH_SERVICE_URL}/student-transport${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  axios(axiosConfig)
+    .then(response => {
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Branch service error', details: error.message }
+      );
+    });
+});
+
 // AdminService proxy routes for events
 router.use('/api/events', (req, res) => {
   console.log('Gateway: Proxying AdminService events request:', req.method, req.originalUrl);
@@ -3179,7 +3286,7 @@ router.use('/api/events', (req, res) => {
 
   // Extract the path after /api/events and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/events', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${ADMIN_SERVICE_URL}/api/events${pathAfterApi}`,
@@ -3461,7 +3568,7 @@ router.use('/api/fee-management', (req, res) => {
 
   // Extract the path after /api/fee-management and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/fee-management', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${FEE_MANAGEMENT_SERVICE_URL}/api${pathAfterApi}`,
@@ -3556,7 +3663,7 @@ router.use('/api/student-fees', (req, res) => {
 
   // Extract the path after /api/student-fees and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/student-fees', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${FEE_MANAGEMENT_SERVICE_URL}/api/student-fees${pathAfterApi}`,
@@ -3604,7 +3711,7 @@ router.use('/api/fee-templates', (req, res) => {
 
   // Extract the path after /api/fee-templates and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/fee-templates', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${ADMIN_SERVICE_URL}/api/fee-templates${pathAfterApi}`,
@@ -3643,7 +3750,7 @@ router.use('/api/fee-templates', (req, res) => {
 router.get('/api/staff', async (req, res) => {
   try {
     console.log('Gateway: Fetching all staff');
-    
+
     // Simplified query first to test connection
     const query = `
       SELECT
@@ -3665,9 +3772,9 @@ router.get('/api/staff', async (req, res) => {
       LEFT JOIN superadmin.branches b ON s.branch_id = b.id
       ORDER BY s.created_at DESC
     `;
-    
+
     const result = await pool.query(query);
-    
+
     res.json({
       success: true,
       data: result.rows,
@@ -3687,7 +3794,7 @@ router.get('/api/staff/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     console.log('Gateway: Fetching staff by user ID:', userId);
-    
+
     const query = `
       SELECT
         s.staff_id,
@@ -3733,18 +3840,18 @@ router.get('/api/staff/user/:userId', async (req, res) => {
       LEFT JOIN superadmin.branches b ON s.branch_id = b.id
       WHERE s.user_id = $1
     `;
-    
+
     const result = await pool.query(query, [userId]);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Staff not found'
       });
     }
-    
+
     const staff = result.rows[0];
-    
+
     res.json({
       success: true,
       data: {
@@ -3854,7 +3961,7 @@ router.get('/api/users/access-level-managers', authenticateToken, async (req, re
 router.get('/api/teachers', async (req, res) => {
   try {
     console.log('Gateway: Fetching all teachers');
-    
+
     // Simplified query first to test connection
     const query = `
       SELECT
@@ -3873,9 +3980,9 @@ router.get('/api/teachers', async (req, res) => {
       LEFT JOIN superadmin.branches b ON t.branch_id = b.id
       ORDER BY t.created_at DESC
     `;
-    
+
     const result = await pool.query(query);
-    
+
     res.json({
       success: true,
       data: result.rows,
@@ -3895,7 +4002,7 @@ router.get('/api/teachers/user/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     console.log('Gateway: Fetching teacher by user ID:', userId);
-    
+
     const query = `
       SELECT
         t.teacher_id,
@@ -3936,18 +4043,18 @@ router.get('/api/teachers/user/:userId', async (req, res) => {
       LEFT JOIN superadmin.branches b ON t.branch_id = b.id
       WHERE t.user_id = $1
     `;
-    
+
     const result = await pool.query(query, [userId]);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'Teacher not found'
       });
     }
-    
+
     const teacher = result.rows[0];
-    
+
     res.json({
       success: true,
       data: {
@@ -3973,16 +4080,16 @@ router.get('/api/teachers/user/:userId', async (req, res) => {
 router.post('/api/users/generate-userid', async (req, res) => {
   try {
     console.log('Gateway: Generating user ID:', req.body);
-    
+
     const { roleType } = req.body;
-    
+
     if (!roleType) {
       return res.status(400).json({
         success: false,
         error: 'Role type is required'
       });
     }
-    
+
     // Generate user ID based on role
     let prefix;
     switch (roleType) {
@@ -3998,7 +4105,7 @@ router.post('/api/users/generate-userid', async (req, res) => {
       default:
         prefix = 'USR';
     }
-    
+
     // Get next number for this role
     const nextNumberResult = await pool.query(
       `SELECT COALESCE(MAX(CAST(SUBSTRING(userid FROM '[0-9]+$') AS INTEGER)), 0) + 1 as next_num
@@ -4006,10 +4113,10 @@ router.post('/api/users/generate-userid', async (req, res) => {
        WHERE userid LIKE $1`,
       [`${prefix}%`]
     );
-    
+
     const nextNumber = nextNumberResult.rows[0].next_num;
     const userId = `${prefix}${nextNumber.toString().padStart(3, '0')}`;
-    
+
     res.json({
       success: true,
       userId: userId
@@ -4027,9 +4134,9 @@ router.post('/api/users/generate-userid', async (req, res) => {
 router.post('/api/users/register', async (req, res) => {
   try {
     console.log('Gateway: Registering user:', req.body);
-    
+
     const { userid, password, name, phone, whatsappNumber, gmail, role, selectedSuperAdmin } = req.body;
-    
+
     // Validate required fields
     if (!userid || !password || !name || !phone || !whatsappNumber || !gmail || !role) {
       return res.status(400).json({
@@ -4037,7 +4144,7 @@ router.post('/api/users/register', async (req, res) => {
         error: 'Missing required fields'
       });
     }
-    
+
     // Check if userid already exists
     const existingUser = await pool.query('SELECT id FROM users WHERE userid = $1', [userid]);
     if (existingUser.rows.length > 0) {
@@ -4046,28 +4153,28 @@ router.post('/api/users/register', async (req, res) => {
         error: 'User ID already exists'
       });
     }
-    
+
     // Start transaction
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       const userId = uuidv4();
       const hashedPassword = await bcrypt.hash(password, 10);
       const email = `${userid.toLowerCase()}@eims.local`;
-      
+
       // Insert user
       await client.query(`
         INSERT INTO users (id, userid, email, role, name, phone, address, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
       `, [userId, userid, email, role, name, phone, gmail]);
-      
+
       // Insert password
       await client.query(`
         INSERT INTO user_auth (user_id, password_hash, created_at)
         VALUES ($1, $2, NOW())
       `, [userId, hashedPassword]);
-      
+
       // If super administrator role, handle super admin relationship
       if (role === 'superadmin' && selectedSuperAdmin) {
         // Insert into superadmin table if it exists
@@ -4080,25 +4187,25 @@ router.post('/api/users/register', async (req, res) => {
           console.log('Superadmin table may not exist, continuing...');
         }
       }
-      
+
       await client.query('COMMIT');
-      
+
       console.log(`✅ User registered successfully: ${userid}`);
-      
+
       res.json({
         success: true,
         message: 'User registered successfully',
         userId: userId,
         email: email
       });
-      
+
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
-    
+
   } catch (error) {
     console.error('Error registering user:', error);
     res.status(500).json({
@@ -4113,7 +4220,7 @@ router.post('/api/users/register', async (req, res) => {
 router.get('/api/v1/superadmin/user-registrations', async (req, res) => {
   try {
     console.log('Gateway: Fetching user registrations');
-    
+
     // This would typically return pending registrations
     // For now, return empty array as placeholder
     res.json({
@@ -4133,7 +4240,7 @@ router.get('/api/v1/superadmin/user-registrations', async (req, res) => {
 router.post('/api/v1/superadmin/user-registrations/:id/approve', async (req, res) => {
   try {
     console.log('Gateway: Approving user registration:', req.params.id);
-    
+
     // This would handle approval of pending registrations
     res.json({
       success: true,
@@ -4170,7 +4277,7 @@ router.use('/api/admin', (req, res) => {
         WHERE employee_type = 'teacher' AND is_active = true
         ORDER BY template_name
       `;
-      
+
       pool.query(query, (error, result) => {
         if (error) {
           console.error('Error fetching deduction templates:', error);
@@ -4180,7 +4287,7 @@ router.use('/api/admin', (req, res) => {
             details: error.message
           });
         }
-        
+
         res.json({
           success: true,
           data: result.rows
@@ -4220,7 +4327,7 @@ router.use('/api/leaves', (req, res) => {
 
   // Extract the path after /api/leaves and append to base URL
   const pathAfterApi = req.originalUrl.replace('/api/leaves', '').trim();
-  
+
   const axiosConfig = {
     method: req.method,
     url: `${ADMIN_SERVICE_URL}/api/leaves${pathAfterApi}`,
@@ -4404,18 +4511,18 @@ router.use('/api/syllabus', (req, res) => {
 // WebSocket proxy endpoint for students to receive real-time notifications
 router.get('/ws/students', (req, res) => {
   console.log('🔌 Gateway: Student WebSocket connection request');
-  
+
   // Verify JWT token for WebSocket connection
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  
+
   if (!token) {
     console.log('⚠️ Gateway: WebSocket connection rejected - no token');
     return res.status(401).json({
       error: 'Authentication token required for WebSocket connection'
     });
   }
-  
+
   try {
     // Verify JWT token
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
@@ -4425,13 +4532,13 @@ router.get('/ws/students', (req, res) => {
           error: 'Invalid or expired token for WebSocket connection'
         });
       }
-      
+
       console.log('✅ Gateway: WebSocket connection authorized for user:', user.role);
-      
+
       // Redirect to ClassesService WebSocket endpoint
       const targetUrl = `${CLASSES_SERVICE_URL}/ws`;
       console.log(`🔄 Redirecting to ClassesService WebSocket: ${targetUrl}`);
-      
+
       // For actual WebSocket proxy, you would use a WebSocket proxy library like 'ws-proxy'
       // For now, provide information about direct connection
       res.json({

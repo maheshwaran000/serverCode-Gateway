@@ -14,11 +14,10 @@ const pool = new Pool({
   max: 20,
   min: 2,
   idleTimeoutMillis: 60000,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 15000,
   statement_timeout: 30000,
   query_timeout: 30000,
   keepAlive: true,
-  keepAliveInitialDelayMillis: 10000,
   ssl: process.env.DB_SSL === 'true' ? {
     rejectUnauthorized: false,
     servername: process.env.DB_HOST
@@ -31,6 +30,23 @@ console.log("Gateway Database Pool Configuration:", {
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   ssl: process.env.DB_SSL
+});
+
+pool.on('connect', () => {
+  console.log('✅ Gateway: Connected to PostgreSQL database');
+});
+
+pool.on('error', (err) => {
+  console.error('❌ Gateway: Database connection error:', err);
+  process.exit(-1);
+});
+
+pool.on('acquire', () => {
+  console.log('🔄 Gateway: Connection acquired from pool');
+});
+
+pool.on('release', () => {
+  console.log('🔄 Gateway: Connection released back to pool');
 });
 
 module.exports = pool;
