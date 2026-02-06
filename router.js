@@ -411,6 +411,35 @@ router.post('/api/auth/create-student', authenticateToken, async (req, res) => {
   }
 });
 
+// Bulk create students
+router.post('/api/auth/bulk-create-students', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Bulk create students request:', req.body?.students?.length || 0);
+
+    const response = await axios.post(
+      `${AUTH_SERVICE_URL}/bulk-create-students`,
+      req.body,
+      { headers: { Authorization: req.headers.authorization } }
+    );
+
+    console.log('Gateway: Bulk create students response:', response.data);
+    return res.json(response.data);
+  } catch (error) {
+    console.error(
+      'Gateway: Bulk create students proxy error:',
+      error.response?.data || error.message
+    );
+
+    const status = error.response?.status || 500;
+    const errData = error.response?.data || {
+      success: false,
+      error: 'Auth service error'
+    };
+
+    return res.status(status).json(errData);
+  }
+});
+
 // Create teacher user
 router.post('/api/auth/create-teacher', authenticateToken, async (req, res) => {
   try {

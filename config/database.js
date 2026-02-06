@@ -11,13 +11,12 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  max: 20,
-  min: 2,
+  max: 5,
+  min: 0,
   idleTimeoutMillis: 60000,
-  connectionTimeoutMillis: 15000,
-  statement_timeout: 30000,
-  query_timeout: 30000,
-  keepAlive: true,
+  connectionTimeoutMillis: 5000,
+  statement_timeout: 10000,
+  keepAlive: false,
   ssl: process.env.DB_SSL === 'true' ? {
     rejectUnauthorized: false,
     servername: process.env.DB_HOST
@@ -38,7 +37,6 @@ pool.on('connect', () => {
 
 pool.on('error', (err) => {
   console.error('❌ Gateway: Database connection error:', err);
-  process.exit(-1);
 });
 
 pool.on('acquire', () => {
