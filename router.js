@@ -470,6 +470,25 @@ router.post('/api/auth/create-staff', authenticateToken, async (req, res) => {
   }
 });
 
+// Get parent's children
+router.get('/api/auth/parents/:parentId/children', authenticateToken, async (req, res) => {
+  try {
+    const { parentId } = req.params;
+    console.log(`Gateway: Get parents children request for parentId: ${parentId}`);
+
+    const response = await axios.get(
+      `${AUTH_SERVICE_URL}/parents/${parentId}/children`,
+      { headers: { Authorization: req.headers.authorization } }
+    );
+
+    console.log('Gateway: Get parents children response:', response.data);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Gateway: Get parents children proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Auth service error' });
+  }
+});
+
 // Public Admissions Service proxy routes (no auth required)
 // router.use('/api/public', (req, res) => {
 //   console.log('Gateway: Proxying Public Admissions request:', req.method, req.originalUrl);
@@ -3092,6 +3111,53 @@ router.use('/api/hrms', (req, res) => {
     });
 });
 
+// AdminService proxy routes for holidays
+router.use('/api/holidays', (req, res) => {
+  console.log('Gateway: Proxying AdminService holidays request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/holidays and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/holidays', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/holidays${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService holidays Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService holidays response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService holidays proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
 // AdminService proxy routes for other admin endpoints (not academic-years)
 router.use('/api/admin-service', (req, res) => {
   console.log('Gateway: Proxying AdminService request:', req.method, req.originalUrl);
@@ -3136,6 +3202,50 @@ router.use('/api/admin-service', (req, res) => {
       res.status(error.response?.status || 500).json(
         error.response?.data || { error: 'Admin service error', details: error.message }
       );
+    });
+});
+
+// AdminService proxy routes for driver app
+router.use('/api/driver', (req, res) => {
+  console.log('Gateway: Proxying AdminService driver request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/driver and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/driver', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/driver${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService driver Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService driver proxy error:', error.message);
+      if (error.response) {
+        res.status(error.response.status).json(error.response.data);
+      } else {
+        res.status(500).json({ error: 'Gateway error connecting to AdminService' });
+      }
     });
 });
 
@@ -3548,12 +3658,10 @@ router.use('/api/grades', (req, res) => {
     'user-agent': req.headers['user-agent']
   };
 
-  // Extract query parameters
-  const queryString = Object.keys(req.query).length > 0 ? '?' + new URLSearchParams(req.query).toString() : '';
-
+  // Use req.originalUrl to forward full path and query params
   const axiosConfig = {
     method: req.method,
-    url: `${ADMIN_SERVICE_URL}/api/grades${queryString}`,
+    url: `${ADMIN_SERVICE_URL}${req.originalUrl}`,
     headers: forwardedHeaders,
     data: req.method !== 'GET' ? req.body : undefined,
     timeout: 60000,
@@ -3776,11 +3884,26 @@ router.use('/api/fee-templates', (req, res) => {
 });
 
 // Staff Management Endpoints
+// Staff Management Endpoints
 router.get('/api/staff', async (req, res) => {
   try {
     console.log('Gateway: Fetching all staff');
 
-    // Simplified query first to test connection
+    // Extract user details from the request
+    const { role } = req.user;
+    const branchId = req.user.branchId || req.user.branch_id;
+
+    let queryParams = [];
+    let whereClause = '';
+
+    // Apply branch filtering for non-superadmin users
+    // If user has a branchId and is not a super-user, filter by branch
+    if (role !== 'superadmin' && role !== 'access_manager' && branchId) {
+      whereClause = 'WHERE s.branch_id = $1';
+      queryParams.push(branchId);
+      console.log(`Gateway: Filtering staff for branch ${branchId}`);
+    }
+
     const query = `
       SELECT
         s.user_id,
@@ -3795,14 +3918,16 @@ router.get('/api/staff', async (req, res) => {
         s.created_at,
         u.name,
         u.email,
-        b.branch_name
+        b.branch_name,
+        s.branch_id
       FROM branch.staff s
       LEFT JOIN users u ON s.user_id = u.id
       LEFT JOIN superadmin.branches b ON s.branch_id = b.id
+      ${whereClause}
       ORDER BY s.created_at DESC
     `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(query, queryParams);
 
     res.json({
       success: true,
@@ -3987,11 +4112,25 @@ router.get('/api/users/access-level-managers', authenticateToken, async (req, re
 });
 
 // Teacher Management Endpoints
+// Teacher Management Endpoints
 router.get('/api/teachers', async (req, res) => {
   try {
     console.log('Gateway: Fetching all teachers');
 
-    // Simplified query first to test connection
+    // Extract user details from the request
+    const { role } = req.user;
+    const branchId = req.user.branchId || req.user.branch_id;
+
+    let queryParams = [];
+    let whereClause = '';
+
+    // Apply branch filtering for non-superadmin users
+    if (role !== 'superadmin' && role !== 'access_manager' && branchId) {
+      whereClause = 'WHERE t.branch_id = $1';
+      queryParams.push(branchId);
+      console.log(`Gateway: Filtering teachers for branch ${branchId}`);
+    }
+
     const query = `
       SELECT
         t.user_id,
@@ -4003,14 +4142,16 @@ router.get('/api/teachers', async (req, res) => {
         t.created_at,
         u.name,
         u.email,
-        b.branch_name
+        b.branch_name,
+        t.branch_id
       FROM branch.teachers t
       LEFT JOIN users u ON t.user_id = u.id
       LEFT JOIN superadmin.branches b ON t.branch_id = b.id
+      ${whereClause}
       ORDER BY t.created_at DESC
     `;
 
-    const result = await pool.query(query);
+    const result = await pool.query(query, queryParams);
 
     res.json({
       success: true,
@@ -4101,6 +4242,66 @@ router.get('/api/teachers/user/:userId', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch teacher',
+      details: error.message
+    });
+  }
+});
+
+
+// Driver Profile Endpoint (Mirroring Teacher Profile)
+router.get('/api/drivers/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log('Gateway: Fetching driver by user ID:', userId);
+
+    const query = `
+      SELECT
+        u.id, 
+        u.userid, 
+        u.name, 
+        u.email, 
+        u.phone, 
+        u.address, 
+        u.role,
+        u.joining_date,
+        u.status,
+        u.salary as basic_salary,
+        br.vehicle_number,
+        br.route_name,
+        br.route_number,
+        b.branch_name
+      FROM users u
+      LEFT JOIN branch.bus_routes br ON u.userid = br.driver_user_id AND br.status = 'active'
+      LEFT JOIN superadmin.branches b ON u.branch_id = b.id
+      WHERE u.id = $1 AND u.role = 'driver'
+    `;
+
+    const result = await pool.query(query, [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Driver not found'
+      });
+    }
+
+    const driver = result.rows[0];
+
+    res.json({
+      success: true,
+      data: {
+        ...driver,
+        department: 'Transport',
+        designation: 'Driver',
+        qualification: 'N/A',
+        experience_years: 'N/A'
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching driver by user ID:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch driver',
       details: error.message
     });
   }
@@ -4282,6 +4483,74 @@ router.post('/api/v1/superadmin/user-registrations/:id/approve', async (req, res
       error: 'Failed to approve user registration',
       details: error.message
     });
+  }
+});
+
+// Admin API routes for leave requests (Proxy to AdminService)
+router.use('/api/admin/leave-requests', async (req, res) => {
+  console.log('Gateway: Proxying leave request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  try {
+    // Construct target URL
+    // req.url is relative to mount point: /api/admin/leave-requests
+    // e.g. if originalUrl is /api/admin/leave-requests, req.url is /
+    // e.g. if originalUrl is /api/admin/leave-requests/top, req.url is /top
+
+    // We want target: ADMIN_SERVICE_URL/api/leave-requests + req.url
+    const path = req.url === '/' ? '' : req.url;
+    const targetUrl = `${ADMIN_SERVICE_URL}/api/leave-requests${path}`;
+
+    console.log('Target URL:', targetUrl);
+
+    const response = await axios({
+      method: req.method,
+      url: targetUrl,
+      headers: forwardedHeaders,
+      data: req.method !== 'GET' && req.method !== 'DELETE' ? req.body : undefined
+    });
+
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error('Gateway: Leave request proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Admin service error' });
+  }
+});
+
+
+// Admin API routes for complaints (Proxy to AdminService)
+router.use('/api/admin/complaints', async (req, res) => {
+  console.log('Gateway: Proxying complaint to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  try {
+    // Target: ADMIN_SERVICE_URL/api/complaints + req.url
+    const path = req.url === '/' ? '' : req.url;
+    const targetUrl = `${ADMIN_SERVICE_URL}/api/complaints${path}`;
+
+    const response = await axios({
+      method: req.method,
+      url: targetUrl,
+      headers: forwardedHeaders,
+      data: req.method !== 'GET' && req.method !== 'DELETE' ? req.body : undefined
+    });
+
+    res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error('Gateway: Complaint proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Admin service error' });
   }
 });
 
@@ -4482,6 +4751,53 @@ router.use('/api/subjects', (req, res) => {
       });
       res.status(error.response?.status || 500).json(
         error.response?.data || { error: 'Classes service error', details: error.message }
+      );
+    });
+});
+
+// AdminService proxy routes for department-incharges
+router.use('/api/department-incharges', (req, res) => {
+  console.log('Gateway: Proxying department-incharges request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/department-incharges and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/department-incharges', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/department-incharges${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService department-incharges Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService department-incharges response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService department-incharges proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
       );
     });
 });
