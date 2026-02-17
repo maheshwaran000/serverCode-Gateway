@@ -2983,6 +2983,46 @@ router.use('/api/classes/:id/attendance', (req, res) => {
 //       );
 //     });
 // });
+// AdminService Bulk Attendance - MUST come before generic /:id route of ClassesService
+router.use('/api/attendance/bulk', (req, res) => {
+  console.log('Gateway: Proxying AdminService attendance bulk request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract query parameters
+  const pathAfterApi = req.originalUrl.replace('/api/attendance/bulk', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/attendance/bulk${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService attendance bulk Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService attendance bulk proxy error:', error.message);
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'AdminService error', details: error.message }
+      );
+    });
+});
+
 router.use('/api/attendance/:id', (req, res) => {
   console.log('Gateway: Proxying Attendance request:', req.method, req.originalUrl);
 
@@ -3906,7 +3946,7 @@ router.get('/api/staff', async (req, res) => {
 
     const query = `
       SELECT
-        s.user_id,
+        s.user_id as id,
         s.staff_id,
         s.department,
         s.designation,
@@ -3951,6 +3991,8 @@ router.get('/api/staff/user/:userId', async (req, res) => {
 
     const query = `
       SELECT
+        s.user_id as id,
+        u.userid,
         s.staff_id,
         s.department,
         s.designation,
@@ -4175,6 +4217,8 @@ router.get('/api/teachers/user/:userId', async (req, res) => {
 
     const query = `
       SELECT
+        t.user_id as id,
+        u.userid,
         t.teacher_id,
         t.department,
         t.subjects,
@@ -4607,11 +4651,52 @@ router.use('/api/admin', (req, res) => {
   }
 });
 
-// Add more API routes here as needed:
-// - /api/students
-// - /api/classes
-// - /api/attendance
-// etc.
+// AdminService proxy routes for attendance management
+router.use('/api/attendance', (req, res) => {
+  console.log('Gateway: Proxying AdminService attendance request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/attendance and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/attendance', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/attendance${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService attendance Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService attendance response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService attendance proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
 // AdminService proxy routes for leave management
 router.use('/api/leaves', (req, res) => {
   console.log('Gateway: Proxying AdminService leaves request:', req.method, req.originalUrl);

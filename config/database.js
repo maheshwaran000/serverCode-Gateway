@@ -11,11 +11,10 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  max: 2,
+  max: 5,
   min: 0,
-  idleTimeoutMillis: 60000,
+  idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
-  statement_timeout: 10000,
   keepAlive: false,
   ssl: process.env.DB_SSL === 'true' ? {
     rejectUnauthorized: false,
