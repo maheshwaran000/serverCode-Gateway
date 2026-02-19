@@ -440,6 +440,21 @@ router.post('/api/auth/bulk-create-students', authenticateToken, async (req, res
   }
 });
 
+// Search parent
+router.post('/api/auth/search-parent', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Search parent request:', req.body);
+    const response = await axios.post(`${AUTH_SERVICE_URL}/search-parent`, req.body, {
+      headers: { Authorization: req.headers.authorization }
+    });
+    console.log('Gateway: Search parent response:', response.data);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Gateway: Search parent proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Auth service error' });
+  }
+});
+
 // Create teacher user
 router.post('/api/auth/create-teacher', authenticateToken, async (req, res) => {
   try {
@@ -3500,6 +3515,50 @@ router.use('/api/events', (req, res) => {
     });
 });
 
+// AdminService proxy routes for activities
+router.use('/api/activities', (req, res) => {
+  console.log('Gateway: Proxying AdminService activities request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}${req.originalUrl}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService activities Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService activities response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService activities proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'AdminService activities proxy error', details: error.message }
+      );
+    });
+});
+
 // AdminService proxy routes for academic exams
 router.use('/api/academic-exams', (req, res) => {
   console.log('Gateway: Proxying AdminService academic-exams request:', req.method, req.originalUrl);
@@ -3913,6 +3972,53 @@ router.use('/api/fee-templates', (req, res) => {
     })
     .catch(error => {
       console.error('Gateway: AdminService fee-templates proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// AdminService proxy routes for attendance
+router.use('/api/admin/attendance', (req, res) => {
+  console.log('Gateway: Proxying AdminService attendance request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/admin/attendance and append to base URL
+  const pathAfterApi = req.originalUrl.replace('/api/admin/attendance', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/attendance${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService attendance Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService attendance response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService attendance proxy error:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data
