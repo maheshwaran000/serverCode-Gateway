@@ -171,6 +171,21 @@ router.post('/api/auth/reset-password', authenticateToken, async (req, res) => {
   }
 });
 
+// Change password for logged-in user
+router.post('/api/auth/change-password', authenticateToken, async (req, res) => {
+  try {
+    console.log('Gateway: Change password request');
+    const response = await axios.post(`${AUTH_SERVICE_URL}/change-password`, req.body, {
+      headers: { Authorization: req.headers.authorization }
+    });
+    console.log('Gateway: Change password response:', response.data);
+    res.json(response.data);
+  } catch (error) {
+    console.error('Gateway: Change password proxy error:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: 'Auth service error' });
+  }
+});
+
 // Create admin user (for branch creators)
 router.post('/api/auth/create-admin', authenticateToken, async (req, res) => {
   try {
@@ -1451,6 +1466,95 @@ router.use('/api/galleries', (req, res) => {
       );
     });
 });
+
+// Specific route for biometrics - proxy to AdminService
+router.use('/api/biometrics', (req, res) => {
+  console.log('Gateway: Proxying biometrics request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/biometrics and append to biometrics
+  const pathAfterApi = req.originalUrl.replace('/api/biometrics', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/biometrics${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService biometrics Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService biometrics response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
+
+// Specific route for banners - proxy to AdminService
+router.use('/api/banners', (req, res) => {
+  console.log('Gateway: Proxying banners request to AdminService:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  // Extract the path after /api/banners and append to banners
+  const pathAfterApi = req.originalUrl.replace('/api/banners', '').trim();
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${ADMIN_SERVICE_URL}/api/banners${pathAfterApi}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: AdminService banners Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization,
+    hasData: !!axiosConfig.data
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: AdminService banners response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: AdminService banners proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'Admin service error', details: error.message }
+      );
+    });
+});
 // Get all branches with aggregated statistics
 router.get('/api/branches/with-stats', authenticateToken, async (req, res) => {
   try {
@@ -2044,6 +2148,49 @@ router.use('/api/users/teachers/profile', (req, res) => {
     })
     .catch(error => {
       console.error('Gateway: User Service teachers/profile proxy error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      res.status(error.response?.status || 500).json(
+        error.response?.data || { error: 'User service error', details: error.message }
+      );
+    });
+});
+
+// User Service proxy routes for branch summary dashboard statistics
+router.use('/api/users/branch-summary/:branchId/:academicYear', (req, res) => {
+  console.log('Gateway: Proxying branch summary request:', req.method, req.originalUrl);
+
+  const forwardedHeaders = {
+    'authorization': req.headers.authorization,
+    'content-type': req.headers['content-type'],
+    'accept': req.headers.accept,
+    'user-agent': req.headers['user-agent']
+  };
+
+  const axiosConfig = {
+    method: req.method,
+    url: `${USER_SERVICE_URL}/branch-summary/${req.params.branchId}/${req.params.academicYear}`,
+    headers: forwardedHeaders,
+    data: req.method !== 'GET' ? req.body : undefined,
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  console.log('Gateway: User Service branch-summary Axios config:', {
+    method: axiosConfig.method,
+    url: axiosConfig.url,
+    hasAuth: !!axiosConfig.headers.authorization
+  });
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: User service branch-summary response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: User Service branch-summary proxy error:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data
@@ -3082,6 +3229,34 @@ router.use('/api/attendance/bulk', (req, res) => {
       res.status(error.response?.status || 500).json(
         error.response?.data || { error: 'AdminService error', details: error.message }
       );
+    });
+});
+
+// Route for today's attendance summary (ClassesService)
+router.get('/api/attendance/today-summary', (req, res) => {
+  console.log('Gateway: Proxying today-summary attendance to ClassesService');
+
+  const axiosConfig = {
+    method: 'GET',
+    url: `${CLASSES_SERVICE_URL}/api/classes/attendance/today-summary`,
+    headers: {
+      'authorization': req.headers.authorization,
+      'content-type': req.headers['content-type'],
+      'accept': req.headers.accept,
+      'user-agent': req.headers['user-agent']
+    },
+    timeout: 60000,
+    validateStatus: () => true
+  };
+
+  axios(axiosConfig)
+    .then(response => {
+      console.log('Gateway: ClassesService today-summary response status:', response.status);
+      res.status(response.status).json(response.data);
+    })
+    .catch(error => {
+      console.error('Gateway: ClassesService today-summary proxy error:', error.message);
+      res.status(error.response?.status || 500).json(error.response?.data || { error: 'Classes service error' });
     });
 });
 
